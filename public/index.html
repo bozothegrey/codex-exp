@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gym Sessions</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Gym Session Log</h1>
+    <form id="sessionForm">
+      <label for="date">Date:</label>
+      <input type="date" id="date" required>
+
+      <label for="activity">Activity:</label>
+      <input type="text" id="activity" required>
+
+      <label for="duration">Duration (min):</label>
+      <input type="number" id="duration">
+
+      <button type="submit">Add Session</button>
+    </form>
+
+    <table id="sessionsTable">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Activity</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <script src="script.js"></script>
+</body>
+</html>
