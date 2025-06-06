@@ -1,5 +1,9 @@
 async function fetchSessions() {
   const res = await fetch('/api/sessions');
+  if (res.status === 401) {
+    window.location.href = '/login.html';
+    return;
+  }
   const data = await res.json();
   const tbody = document.querySelector('#sessionsTable tbody');
   tbody.innerHTML = '';
@@ -19,9 +23,18 @@ document.getElementById('sessionForm').addEventListener('submit', async e => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, activity, duration })
+  }).then(res => {
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+    }
   });
   e.target.reset();
   fetchSessions();
 });
 
 window.onload = fetchSessions;
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});

@@ -17,6 +17,11 @@ Simple mobile-friendly web application to log gym workouts. Backend uses Node.js
    ```
 3. Open `http://localhost:3000` in your browser.
 
+Log in using one of the predefined users:
+* **emanuele** / **ghisa**
+* **SBP** / **ghisa**
+* **dino** / **ghisa**
+
 The SQLite database file `gym.db` will be created automatically in the project directory.
 
 ## Docker
