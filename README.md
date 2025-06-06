@@ -1,6 +1,6 @@
 # Gym Session Logger
 
-Simple mobile-friendly web application to log gym workouts. Backend uses Node.js with SQLite storage.
+Simple mobile-friendly web application to log gym workouts. Each session can contain multiple exercises and sets, stored in a SQLite database.
 
 ## Prerequisites
 - Node.js 16+
