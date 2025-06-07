@@ -18,6 +18,22 @@ async function loadSession() {
     ex.sets.forEach(s => {
       const li = document.createElement('li');
       li.textContent = `${s.reps} reps @ ${s.weight || 0}`;
+      
+      if (!readonly && !data.closed) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '×';
+        deleteBtn.style.marginLeft = '10px';
+        deleteBtn.style.color = 'red';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.background = 'none';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.addEventListener('click', async () => {
+          await fetch(`/api/sets/${s.id}`, { method: 'DELETE' });
+          loadSession();
+        });
+        li.appendChild(deleteBtn);
+      }
+      
       ul.appendChild(li);
     });
     div.appendChild(ul);
