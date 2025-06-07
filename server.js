@@ -26,6 +26,7 @@ app.get('/', (req, res) => {
 
 // Initialize SQLite database
 const db = new sqlite3.Database(DB_FILE);
+db.run('PRAGMA foreign_keys = ON');
 
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
@@ -84,11 +85,16 @@ function ensureLoggedIn(req, res, next) {
   next();
 }
 
+function handleError(res, err) {
+  console.error(err);
+  res.status(500).json({ error: err.message });
+}
+
 // Auth routes
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     if (!row) return res.status(401).json({ error: 'Invalid credentials' });
     const match = await bcrypt.compare(password, row.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
@@ -106,7 +112,7 @@ app.post('/api/logout', (req, res) => {
 // Session routes
 app.get('/api/sessions', ensureLoggedIn, (req, res) => {
   db.all('SELECT * FROM sessions WHERE user_id = ? ORDER BY date DESC', [req.session.userId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     res.json(rows);
   });
 });
@@ -117,25 +123,38 @@ app.post('/api/sessions', ensureLoggedIn, (req, res) => {
     return res.status(400).json({ error: 'date is required' });
   }
   db.run('INSERT INTO sessions (user_id, date) VALUES (?, ?)', [req.session.userId, date], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     res.json({ id: this.lastID, date, closed: 0 });
   });
+});
+
+app.delete('/api/sessions/:id', ensureLoggedIn, (req, res) => {
+  const id = req.params.id;
+  db.run(
+    `DELETE FROM sessions WHERE id = ? AND user_id = ?`,
+    [id, req.session.userId],
+    function (err) {
+      if (err) return handleError(res, err);
+      if (this.changes === 0) return res.status(404).json({ error: 'not found' });
+      res.json({ id });
+    }
+  );
 });
 
 app.get('/api/sessions/:id', ensureLoggedIn, (req, res) => {
   const id = req.params.id;
   db.get('SELECT * FROM sessions WHERE id = ? AND user_id = ?', [id, req.session.userId], (err, sessionRow) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     if (!sessionRow) return res.status(404).json({ error: 'not found' });
     db.all('SELECT * FROM exercises WHERE session_id = ?', [id], (err, exercises) => {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return handleError(res, err);
       const exIds = exercises.map(e => e.id);
       if (exIds.length === 0) {
         return res.json({ ...sessionRow, exercises: [] });
       }
       const placeholders = exIds.map(() => '?').join(',');
       db.all(`SELECT * FROM sets WHERE exercise_id IN (${placeholders})`, exIds, (err, sets) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) return handleError(res, err);
         const map = {};
         sets.forEach(s => {
           if (!map[s.exercise_id]) map[s.exercise_id] = [];
@@ -155,9 +174,26 @@ app.post('/api/sessions/:id/exercises', ensureLoggedIn, (req, res) => {
     return res.status(400).json({ error: 'name is required' });
   }
   db.run('INSERT INTO exercises (session_id, name) VALUES (?, ?)', [sessionId, name], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     res.json({ id: this.lastID, session_id: sessionId, name });
   });
+});
+
+app.delete('/api/exercises/:id', ensureLoggedIn, (req, res) => {
+  const id = req.params.id;
+  db.run(
+    `DELETE FROM exercises WHERE id IN (
+      SELECT e.id FROM exercises e
+      JOIN sessions s ON e.session_id = s.id
+      WHERE e.id = ? AND s.user_id = ?
+    )`,
+    [id, req.session.userId],
+    function (err) {
+      if (err) return handleError(res, err);
+      if (this.changes === 0) return res.status(404).json({ error: 'not found' });
+      res.json({ id });
+    }
+  );
 });
 
 app.post('/api/exercises/:id/sets', ensureLoggedIn, (req, res) => {
@@ -167,19 +203,41 @@ app.post('/api/exercises/:id/sets', ensureLoggedIn, (req, res) => {
     return res.status(400).json({ error: 'reps is required' });
   }
   db.run('INSERT INTO sets (exercise_id, reps, weight) VALUES (?, ?, ?)', [exerciseId, reps, weight || null], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     res.json({ id: this.lastID, exercise_id: exerciseId, reps, weight });
   });
+});
+
+app.delete('/api/sets/:id', ensureLoggedIn, (req, res) => {
+  const id = req.params.id;
+  db.run(
+    `DELETE FROM sets WHERE id IN (
+      SELECT s.id FROM sets s
+      JOIN exercises e ON s.exercise_id = e.id
+      JOIN sessions sess ON e.session_id = sess.id
+      WHERE s.id = ? AND sess.user_id = ?
+    )`,
+    [id, req.session.userId],
+    function (err) {
+      if (err) return handleError(res, err);
+      if (this.changes === 0) return res.status(404).json({ error: 'not found' });
+      res.json({ id });
+    }
+  );
 });
 
 app.post('/api/sessions/:id/close', ensureLoggedIn, (req, res) => {
   const id = req.params.id;
   db.run('UPDATE sessions SET closed = 1 WHERE id = ? AND user_id = ?', [id, req.session.userId], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return handleError(res, err);
     res.json({ id });
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;
