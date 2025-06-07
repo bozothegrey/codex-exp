@@ -24,9 +24,10 @@ async function loadSession() {
 
     if (!readonly && !data.closed) {
       const form = document.createElement('form');
+      const lastValues = JSON.parse(localStorage.getItem(`exercise_${ex.name}`)) || {};
       form.innerHTML = `
-        <input type="number" name="weight" placeholder="weight" step="any">
-        <input type="number" name="reps" placeholder="reps" required>
+        <input type="number" name="weight" placeholder="weight" step="any" value="${lastValues.weight || ''}">
+        <input type="number" name="reps" placeholder="reps" required value="${lastValues.reps || ''}">
         <button type="submit">Add Set</button>
       `;
       form.addEventListener('submit', async e => {
@@ -38,6 +39,7 @@ async function loadSession() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ weight, reps })
         });
+        localStorage.setItem(`exercise_${ex.name}`, JSON.stringify({ weight, reps }));
         loadSession();
       });
       div.appendChild(form);
