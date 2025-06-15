@@ -4,7 +4,8 @@
   "description": "\"# codex-exp\"  # codex-exp",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:coverage": "nyc --reporter=text --reporter=lcov node --test",
     "start": "node server.js"
   },
   "keywords": [],
@@ -12,9 +13,18 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bcrypt": "^5.1.0",
     "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
     "express-session": "^1.17.3",
-    "bcrypt": "^5.1.0"
+    "node-fetch": "^2.7.0",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "jest": "^29.7.0",
+    "jsdom": "^26.1.0",
+    "nyc": "^15.1.0",
+    "sinon": "^17.0.0",
+    "supertest": "^7.1.1"
   }
 }
