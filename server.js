@@ -71,6 +71,37 @@ function createApp(sessionConfig = {}) {
         FOREIGN KEY(exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
       )`);
 
+      // New table for user follows
+      await dbService.run(`CREATE TABLE IF NOT EXISTS follows (
+        follower_id INTEGER NOT NULL,
+        following_id INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (follower_id, following_id),
+        FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+
+      // New table for notifications
+      await dbService.run(`CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+
+      // New table for user activities/updates
+      await dbService.run(`CREATE TABLE IF NOT EXISTS user_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+
       // Insert default users if none exist
       const defaultUsers = [
         { username: 'emanuele', password: 'ghisa' },
@@ -91,8 +122,7 @@ function createApp(sessionConfig = {}) {
   }
 
   initializeDatabase().then(() => {
-    dbReady = true;
-    console.log('Database initialized');
+    dbReady = true;    
   }).catch(err => {
     console.error('Database initialization failed:', err);
     process.exit(1);
@@ -121,8 +151,7 @@ app.post('/api/login', async (req, res) => {
   try {
     console.log('Login attempt:', { username: req.body.username });
     const { username, password } = req.body;
-    const rows = await dbService.query('SELECT * FROM users WHERE username = ?', [username]);
-    console.log('User lookup result:', { userExists: rows.length > 0 });
+    const rows = await dbService.query('SELECT * FROM users WHERE username = ?', [username]);    
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     
     const row = rows[0];
@@ -134,6 +163,7 @@ app.post('/api/login', async (req, res) => {
     
     console.log('Successful login for user:', username);
     req.session.userId = row.id;
+    req.session.username = row.username;
     req.session.save(err => {
       if (err) {
         console.error('Session save error:', err);
@@ -478,15 +508,23 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   });
 
   app.post('/api/exercises/:id/sets', ensureLoggedIn, async (req, res) => {
+    
     try {
       const exerciseId = req.params.id;
       const { reps, weight } = req.body;
       const userId = req.session.userId;
+      let set;
+      console.log('About to call insert an exercise for userId', userId);
+
+      if (exerciseId == null) {
+        return res.status(400).json({ error: 'ExerciseId is required' });
+      }
 
       if (reps == null) {
         return res.status(400).json({ error: 'reps is required' });
       }
 
+      console.log('Checking exerciseId ', exerciseId, 'exists for userId', userId);
       const exercise = await dbService.query(
         `SELECT e.* FROM exercises e
          JOIN sessions s ON e.session_id = s.id
@@ -498,26 +536,39 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         return res.status(404).json({ error: 'exercise not found' });
       }
 
-      const result = await dbService.run(
-        'INSERT INTO sets (exercise_id, reps, weight) VALUES (?, ?, ?)',
-        [exerciseId, reps, weight || null]
-      );
+      console.log('Inserting set');
+      try {
+        const result = await dbService.run(
+          'INSERT INTO sets (exercise_id, reps, weight) VALUES (?, ?, ?)',
+          [exerciseId, reps, weight || null]
+        );     
 
-      const set = {
-        id: result.lastID,
-        exercise_id: exerciseId,
-        reps,
-        weight: weight || null
-      };
+        set = {
+          id: result.lastID,
+          exercise_id: exerciseId,
+          reps,
+          weight: weight || null
+        };  
 
-      dbService.emit('set:created', {
-        setId: set.id,
-        exerciseId,
-        sessionId: exercise[0].session_id,
-        userId,
-        reps,
-        weight
-      });
+      } catch (err) {
+        console.error('Error inserting set:', err);
+      }    
+
+      // Notify followers of new set logged
+      console.log('About to call notifyFollowers for userId', userId, 'with set', set);
+      try {
+        await notifyFollowers(userId, 'set_logged', {
+          userId: userId,
+          setId: set.id,
+          exerciseId: exerciseId,
+          sessionId: exercise[0].session_id,
+          reps,
+          weight: weight || null,
+          message: `${req.session.username || 'A user you follow'} logged a new ${exerciseId} set: ${reps} reps${weight ? ' @ ' + weight + 'kg' : ''}`
+        });
+      } catch (notifyErr) {
+        console.error('Error in notifyFollowers:', notifyErr);
+      }
 
       res.json(set);
     } catch (err) {
@@ -612,14 +663,170 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
     }
   });
 
-  return app;
-}
+  // Follow a user
+  app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
+    try {
+      const followingId = parseInt(req.params.userId);
+      const followerId = req.session.userId;
 
-if (require.main === module) {
-  const app = createApp();
-  app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+      if (followerId === followingId) {
+        return res.status(400).json({ error: 'Cannot follow yourself' });
+      }
+
+      // Check if user exists
+      const user = await dbService.query('SELECT id FROM users WHERE id = ?', [followingId]);
+      if (!user.length) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Create follow relationship
+      await dbService.run(
+        'INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)',
+        [followerId, followingId]
+      );
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
   });
+
+  // Unfollow a user
+  app.delete('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
+    try {
+      const followingId = parseInt(req.params.userId);
+      const followerId = req.session.userId;
+
+      await dbService.run(
+        'DELETE FROM follows WHERE follower_id = ? AND following_id = ?',
+        [followerId, followingId]
+      );
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Get user's followers
+  app.get('/api/followers', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const followers = await dbService.query(
+        `SELECT u.id, u.username 
+         FROM follows f 
+         JOIN users u ON f.follower_id = u.id 
+         WHERE f.following_id = ?`,
+        [userId]
+      );
+      res.json(followers);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Get user's following
+  app.get('/api/following', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const following = await dbService.query(
+        `SELECT u.id, u.username 
+         FROM follows f 
+         JOIN users u ON f.following_id = u.id 
+         WHERE f.follower_id = ?`,
+        [userId]
+      );
+      res.json(following);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Get user's notifications
+  app.get('/api/notifications', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const notifications = await dbService.query(
+        `SELECT id, type, data, is_read, created_at 
+         FROM notifications 
+         WHERE user_id = ? 
+         ORDER BY created_at DESC 
+         LIMIT 50`,
+        [userId]
+      );
+      res.json(notifications);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Mark notification as read
+  app.put('/api/notifications/:id/read', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const notificationId = parseInt(req.params.id);
+
+      await dbService.run(
+        'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
+        [notificationId, userId]
+      );
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Helper function to create notifications for followers
+  async function notifyFollowers(userId, activityType, activityData) {
+    try {
+      // First log the activity
+      await dbService.run(
+        'INSERT INTO user_activities (user_id, type, data) VALUES (?, ?, ?)',
+        [userId, activityType, JSON.stringify(activityData)]
+      );
+
+      // Get followers
+      const followers = await dbService.query(
+        `SELECT follower_id 
+         FROM follows 
+         WHERE following_id = ?`,
+        [userId]
+      );
+      console.log('notifyFollowers: userId', userId, 'activityType', activityType, 'followers', followers);
+
+      // Notify each follower
+      for (const follower of followers) {
+        await dbService.run(
+          `INSERT INTO notifications (user_id, type, data) VALUES (?, ?, ?)`,
+          [follower.follower_id, activityType, JSON.stringify(activityData)]
+        );
+        console.log(`Notification created for follower_id=${follower.follower_id}, type=${activityType}`);
+      }
+    } catch (err) {
+      console.error('Error notifying followers:', err);
+    }
+  }
+
+  // Get current user info
+  app.get('/api/me', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const user = await dbService.query('SELECT id, username FROM users WHERE id = ?', [userId]);
+      if (!user.length) return res.status(404).json({ error: 'User not found' });
+      res.json(user[0]);
+    } catch (err) {
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  return app;
 }
 
 module.exports = createApp;

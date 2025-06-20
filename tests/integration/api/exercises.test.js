@@ -11,7 +11,6 @@ beforeAll(async () => {
   const { server, address, db } = await initializeTestApp();
   testServer = server;
   testRequest = request(address);
-  console.log('Test server initialized at:', address);
 });
 
 afterAll(async () => {
