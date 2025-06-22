@@ -77,20 +77,18 @@ async function setupTestDatabase() {
   return dbService;
 }
 
-async function createTestSession(dbService, userId, date = '2025-06-08') {
-  const result = await dbService.run(
-    'INSERT INTO sessions (user_id, date) VALUES (?, ?)',
-    [userId, date]
-  );
-  return result.lastID;
+async function createTestSession(userId, date = '2025-06-08') {
+  const response = await request(app)
+    .post('/api/sessions')
+    .send({ user_id: userId, date });
+  return response.body.id;
 }
 
-async function createTestExercise(dbService, sessionId, name = 'Bench Press') {
-  const result = await dbService.run(
-    'INSERT INTO exercises (session_id, name) VALUES (?, ?)',
-    [sessionId, name]
-  );
-  return result.lastID;
+async function createTestExercise(sessionId, name = 'Bench Press') {
+  const response = await request(app)
+    .post(`/api/sessions/${sessionId}/exercises`)
+    .send({ name });
+  return response.body.id;
 }
 
 async function loginTestUser(username, password) {
