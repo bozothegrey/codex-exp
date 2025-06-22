@@ -3,6 +3,7 @@ const request = require('supertest');
 const session = require('express-session');
 const createApp = require('../server');
 const DatabaseService = require('../db/dbService');
+const { initializeDatabase } = require('../db/init');
 
 let testDb;
 let app;
@@ -72,29 +73,7 @@ afterAll(async () => {
 
 async function setupTestDatabase() {
   const dbService = new DatabaseService(':memory:');
-  
-  // Create tables
-  await dbService.run(`CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL
-  )`);
-  
-  await dbService.run(`CREATE TABLE sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    date TEXT NOT NULL,
-    closed INTEGER DEFAULT 0,
-    FOREIGN KEY(user_id) REFERENCES users(id)
-  )`);
-  
-  await dbService.run(`CREATE TABLE exercises (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-  )`);
-
+  await initializeDatabase(dbService, false); // Skip default users for tests
   return dbService;
 }
 
