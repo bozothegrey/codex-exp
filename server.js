@@ -189,6 +189,17 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
     });
   });
 
+  app.get('/logout', (req, res) => {
+    const userId = req.session.userId;
+    req.session.destroy(() => {
+      if (userId) {
+        dbService.emit('user:logout', { userId });
+      }
+      res.redirect('index.html');
+
+    });
+  });
+
   // Session routes
   app.get('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {

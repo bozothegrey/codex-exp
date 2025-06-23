@@ -82,3 +82,22 @@ th, td {
     font-size: 1rem;
   }
 }
+
+.nav-link {
+  color: #000000;
+  text-decoration: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font-weight: normal;
+  border-radius: 0;
+  transition: none;
+  font-size: 10pt;
+}
+
+.nav-link:hover,
+.nav-link:focus {
+  text-decoration: underline;
+  color: #000000;
+  background: none;
+}

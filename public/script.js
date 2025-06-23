@@ -1,9 +1,10 @@
 async function fetchSessions() {
   const res = await fetch('/api/sessions');
-  if (res.status === 401) {
-    window.location.href = '/login.html';
-    return;
-  }
+// remove redirect on 410 to Login
+// if (res.status === 401) {
+//    window.location.href = '/login.html';
+//    return;
+//}
   const data = await res.json();
   const tbody = document.querySelector('#sessionsTable tbody');
   tbody.innerHTML = '';
@@ -27,10 +28,11 @@ document.getElementById('sessionForm').addEventListener('submit', async e => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date })
   });
-  if (res.status === 401) {
-    window.location.href = '/login.html';
-    return;
-  }
+  // remove redirect on 410 to Login
+  // if (res.status === 401) {
+  //   window.location.href = '/login.html';
+  //   return;
+  // }
   const session = await res.json();
   window.location.href = `session.html?id=${session.id}`;
 });
@@ -43,17 +45,17 @@ async function updateAuthLinks() {
       document.getElementById('usernameDisplay').innerText = user.username;
       document.getElementById('usernameDisplay').style.display = '';
       document.getElementById('loginLink').style.display = 'none';
-      document.getElementById('logoutBtn').style.display = '';
+      document.getElementById('logoutLink').style.display = '';
     } else {
       document.getElementById('usernameDisplay').style.display = 'none';
       document.getElementById('loginLink').style.display = '';
-      document.getElementById('logoutBtn').style.display = 'none';
+      document.getElementById('logoutLink').style.display = 'none';
     }
   } catch (e) {
     console.log('Auth check error:', e);
     document.getElementById('usernameDisplay').style.display = 'none';
     document.getElementById('loginLink').style.display = '';
-    document.getElementById('logoutBtn').style.display = 'none';
+      document.getElementById('logoutLink').style.display = 'none';
   }
 }
 
@@ -61,8 +63,3 @@ window.onload = async () => {
   await updateAuthLinks();
   fetchSessions();
 };
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetch('/api/logout', { method: 'POST' });
-  window.location.href = '/login.html';
-});
