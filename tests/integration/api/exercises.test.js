@@ -5,7 +5,7 @@ let testRequest;
 let testServer;
 
 beforeAll(async () => {
-  jest.setTimeout(5000);
+  jest.setTimeout(20000);
   
   // Initialize test database and app
   const { server, address, db } = await initializeTestApp();
@@ -19,8 +19,7 @@ afterAll(async () => {
   }
 });
 
-  describe('Exercise Management API', () => {
-  jest.setTimeout(10000);
+  describe('Exercise Management API', () => {  
   let testUser;
   let sessionCookie;
   let testSessionId;

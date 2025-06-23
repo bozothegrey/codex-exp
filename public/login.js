@@ -6,12 +6,18 @@ form.addEventListener('submit', async (e) => {
   const res = await fetch('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password }),
+    credentials: 'include' // Ensure cookies are sent/received
   });
   if (res.ok) {
     window.location.href = '/';
   } else {
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = { error: 'Login failed' };
+    }
     document.getElementById('error').innerText = data.error || 'Login failed';
   }
 });

@@ -35,7 +35,32 @@ document.getElementById('sessionForm').addEventListener('submit', async e => {
   window.location.href = `session.html?id=${session.id}`;
 });
 
-window.onload = fetchSessions;
+async function updateAuthLinks() {
+  try {
+    const res = await fetch('/api/me');    
+    if (res.ok) {
+      const user = await res.json();     
+      document.getElementById('usernameDisplay').innerText = user.username;
+      document.getElementById('usernameDisplay').style.display = '';
+      document.getElementById('loginLink').style.display = 'none';
+      document.getElementById('logoutBtn').style.display = '';
+    } else {
+      document.getElementById('usernameDisplay').style.display = 'none';
+      document.getElementById('loginLink').style.display = '';
+      document.getElementById('logoutBtn').style.display = 'none';
+    }
+  } catch (e) {
+    console.log('Auth check error:', e);
+    document.getElementById('usernameDisplay').style.display = 'none';
+    document.getElementById('loginLink').style.display = '';
+    document.getElementById('logoutBtn').style.display = 'none';
+  }
+}
+
+window.onload = async () => {
+  await updateAuthLinks();
+  fetchSessions();
+};
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/logout', { method: 'POST' });

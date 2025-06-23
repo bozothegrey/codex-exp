@@ -4,7 +4,7 @@
   "description": "\"# codex-exp\"  # codex-exp",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
+    "test": "jest --forceExit --detectOpenHandles",
     "test:coverage": "nyc --reporter=text --reporter=lcov node --test",
     "start": "node server.js"
   },

@@ -733,6 +733,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
   // Get current user info
   app.get('/api/me', ensureLoggedIn, async (req, res) => {
+    console.log(`Calling api/me for userId: ${req.session.userId}`);
     try {
       const userId = req.session.userId;
       const user = await dbService.query('SELECT id, username FROM users WHERE id = ?', [userId]);
@@ -747,3 +748,11 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 }
 
 module.exports = createApp;
+
+// If run directly, start the server
+if (require.main === module) {
+  const app = createApp();
+  app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+  });
+}
