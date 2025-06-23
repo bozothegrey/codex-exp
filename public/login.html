@@ -8,13 +8,41 @@
 </head>
 <body>
   <div class="container">
-    <h1>Login</h1>
-    <form id="loginForm">
-      <label for="username">Username:</label>
-      <input type="text" id="username" required>
-      <label for="password">Password:</label>
-      <input type="password" id="password" required>
-      <button type="submit">Login</button>
+    <b>Login</b><br><br>
+    <form id="loginForm" action="/api/login" method="POST">
+      <table>
+        <tbody>
+          <tr>
+            <td>username:</td>
+            <td><input id="username" type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off" autofocus="true"></td>
+          </tr>
+          <tr>
+            <td>password:</td>
+            <td><input id="password" type="password" name="password" size="20"></td>
+          </tr>
+        </tbody>
+      </table>
+      <br>
+      <input type="submit" value="login">
+    </form>
+    <a href="#">Forgot your password?</a><br><br>
+
+    <b>Create Account</b><br><br>
+    <form id="signupForm" action="/api/register" method="POST">
+      <table>
+        <tbody>
+          <tr>
+            <td>username:</td>
+            <td><input type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off"></td>
+          </tr>
+          <tr>
+            <td>password:</td>
+            <td><input type="password" name="password" size="20"></td>
+          </tr>
+        </tbody>
+      </table>
+      <br>
+      <input type="submit" value="create account">
     </form>
     <p id="error" style="color:red"></p>
   </div>

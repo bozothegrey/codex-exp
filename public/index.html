@@ -7,25 +7,52 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Gym Sessions</h1>
-    <button id="logoutBtn" style="float:right">Logout</button>
-    <form id="sessionForm">
+  <header>
+    <div class="logo">Gym Sessions</div>
+    <div class="auth-links">
+      <span id="usernameDisplay" style="display:none; margin-right: 10px;"></span>
+      <a href="login.html" id="loginLink">Login</a>
+      <button id="logoutBtn" style="display:none">Logout</button>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="left-column">
+      <form id="sessionForm">
       <label for="date">Date:</label>
       <input type="date" id="date" required>
       <button type="submit">Start Session</button>
-    </form>
+      </form>
 
-    <table id="sessionsTable">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+      <table id="sessionsTable">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="right-column">
+      <div class="follow-section">
+        <h3>Follow Users</h3>
+        <div class="follow-controls">
+          <select id="userSelect">
+            <option value="">Select user to follow</option>
+          </select>
+          <button id="followBtn">Follow</button>
+        </div>
+        <ul id="followedUsersList"></ul>
+      </div>
+      
+      <div class="notifications-section">
+        <h3>Notifications</h3>
+        <ul id="notificationsList"></ul>
+      </div>
+    </div>
   </div>
   <script src="script.js"></script>
 </body>

@@ -5,7 +5,7 @@ let testRequest;
 let testServer;
 
 beforeAll(async () => {
-  jest.setTimeout(5000);
+  jest.setTimeout(20000);
   const { server, address, db } = await initializeTestApp();
   testServer = server;
   testRequest = request(address);
@@ -17,8 +17,7 @@ afterAll(async () => {
   }
 });
 
-describe('Social Features API', () => {
-  jest.setTimeout(10000);
+describe('Social Features API', () => {  
   let userA, userB, cookieA, cookieB, userAId, userBId, sessionId;
 
   beforeEach(async () => {

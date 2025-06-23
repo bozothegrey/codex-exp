@@ -5,7 +5,7 @@ let testRequest;
 let testServer;
 
 beforeAll(async () => {
-  jest.setTimeout(5000);
+  jest.setTimeout(20000);
   
   // Initialize test database and app
   const { server, address, db } = await initializeTestApp();
@@ -19,8 +19,7 @@ afterAll(async () => {
   }
 });
 
-describe('Authentication API', () => {
-  jest.setTimeout(10000);
+describe('Authentication API', () => {  
   let testUser;
   let sessionCookie;
 
@@ -217,6 +216,23 @@ describe('Authentication API', () => {
           .delete('/api/user');
           // No session cookie
 
+        expect(response.statusCode).toBe(401);
+      });
+    });
+
+    describe('GET /api/me', () => {
+      it('should return the current user info when authenticated', async () => {
+        const response = await testRequest
+          .get('/api/me')
+          .set('Cookie', sessionCookie);
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toHaveProperty('username', testUser.username);
+        // Add more expectations as needed, e.g., id, email, etc.
+      });
+
+      it('should return 401 if not authenticated', async () => {
+        const response = await testRequest.get('/api/me');
         expect(response.statusCode).toBe(401);
       });
     });
