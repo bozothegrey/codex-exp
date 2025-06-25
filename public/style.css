@@ -67,6 +67,25 @@ th, td {
   margin-left: 5px;
 }
 
+.follow-tick {
+  color: #1ca21c;
+  background: none;
+  border: none;
+  font-size: 1.2em;
+  cursor: pointer;
+  margin-left: 8px;
+  vertical-align: middle;
+  line-height: 1;
+  position: relative;
+  top: 1px;
+}
+
+.follow-tick:hover,
+.follow-tick:focus {
+  color: #178a17;
+  background: none;
+}
+
 #followedUsersList, #notificationsList {
   list-style-type: none;
   padding: 0;

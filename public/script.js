@@ -59,7 +59,114 @@ async function updateAuthLinks() {
   }
 }
 
+document.getElementById('findUserBtn').addEventListener('click', async () => {
+  const username = document.getElementById('userSearchInput').value.trim();
+  const resultDiv = document.getElementById('userSearchResult');
+  resultDiv.innerHTML = '';
+  if (!username) {
+    resultDiv.textContent = 'Please enter a username.';
+    return;
+  }
+  try {
+    const res = await fetch(`/api/user?username=${encodeURIComponent(username)}`);
+    if (res.ok) {
+      const user = await res.json();
+      resultDiv.innerHTML = `<span>Username: <b>${user.username}</b></span> <button id="followUserBtn" class="follow-tick" title="Follow">&#10003;</button>`;
+      document.getElementById('followUserBtn').onclick = async () => {
+        const followRes = await fetch('/api/follow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id })
+        });
+        if (followRes.ok) {
+          addFollowedUserToList(user);
+          resultDiv.innerHTML = '<span>Now following ' + user.username + '.</span>';
+        } else {
+          const err = await followRes.json();
+          resultDiv.innerHTML = `<span style='color:red'>${err.error || 'Could not follow user.'}</span>`;
+        }
+      };
+    } else {
+      resultDiv.innerHTML = '<span style="color:red">User not found.</span>';
+    }
+  } catch (e) {
+    resultDiv.innerHTML = '<span style="color:red">Error searching for user.</span>';
+  }
+});
+
+async function fetchFollowedUsers() {
+  const ul = document.getElementById('followedUsersList');
+  ul.innerHTML = '';
+  try {
+    const res = await fetch('/api/follows');
+    if (res.ok) {
+      const users = await res.json();
+      users.forEach(user => addFollowedUserToList(user));
+    }
+  } catch (e) {
+    // Optionally handle error
+  }
+}
+
+function addFollowedUserToList(user) {
+  const ul = document.getElementById('followedUsersList');
+  const li = document.createElement('li');
+  li.textContent = user.username + ' ';
+  const btn = document.createElement('button');
+  btn.innerHTML = '&times;';
+  btn.className = 'defollow';
+  btn.title = 'Unfollow';
+  btn.onclick = async () => {
+    try {
+      const res = await fetch(`/api/follow/${user.id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        li.remove();
+      } else {
+        btn.textContent = 'Error';
+      }
+    } catch (e) {
+      btn.textContent = 'Error';
+    }
+  };
+  li.appendChild(btn);
+  ul.appendChild(li);
+}
+
+async function fetchNotifications() {
+  const ul = document.getElementById('notificationsList');
+  ul.innerHTML = '';
+  try {
+    const res = await fetch('/api/notifications');
+    if (res.ok) {
+      const notifications = await res.json();
+      notifications.forEach(n => {
+        const li = document.createElement('li');
+        let msg = '';
+        if (n.type === 'set_logged') {
+          const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+          msg = data.message || `${data.username || 'A user you follow'} logged a new set.`;
+        } else {
+          msg = n.message || n.type;
+        }
+        li.textContent = msg;
+        ul.appendChild(li);
+      });
+    }
+  } catch (e) {
+    // Optionally handle error
+  }
+}
+
+function startNotificationsPolling() {
+  fetchNotifications();
+  setInterval(fetchNotifications, 5000); // Poll every 5 seconds
+}
+
 window.onload = async () => {
   await updateAuthLinks();
   fetchSessions();
+  fetchFollowedUsers();
+  startNotificationsPolling();
 };

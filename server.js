@@ -473,8 +473,8 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
         set = {
           id: result.lastID,
-          exercise_id: exerciseId,
-          reps,
+          exercise: exercise[0].name, 
+          reps: reps,
           weight: weight || null
         };  
 
@@ -487,12 +487,8 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       try {
         await notifyFollowers(userId, 'set_logged', {
           userId: userId,
-          setId: set.id,
-          exerciseId: exerciseId,
-          sessionId: exercise[0].session_id,
-          reps,
-          weight: weight || null,
-          message: `${req.session.username || 'A user you follow'} logged a new ${exerciseId} set: ${reps} reps${weight ? ' @ ' + weight + 'kg' : ''}`
+          setId: set.id,          
+          message: `${req.session.username || 'A user you follow'} logged a new set: ${exercise[0].name} ${reps} reps${weight ? ' @ ' + weight + 'kg' : ''}`
         });
       } catch (notifyErr) {
         console.error('Error in notifyFollowers:', notifyErr);
@@ -591,34 +587,26 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
     }
   });
 
-  // Follow a user
-  app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
-    try {
-      const followingId = parseInt(req.params.userId);
-      const followerId = req.session.userId;
+  // Find user by username
+app.get('/api/user', async (req, res) => {
+  const { username } = req.query;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  const users = await dbService.query('SELECT id, username FROM users WHERE username = ?', [username]);
+  if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+  res.json(users[0]);
+});
 
-      if (followerId === followingId) {
-        return res.status(400).json({ error: 'Cannot follow yourself' });
-      }
-
-      // Check if user exists
-      const user = await dbService.query('SELECT id FROM users WHERE id = ?', [followingId]);
-      if (!user.length) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Create follow relationship
-      await dbService.run(
-        'INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)',
-        [followerId, followingId]
-      );
-      
-      res.json({ success: true });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
+// Follow user endpoint
+app.post('/api/follow', ensureLoggedIn, async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'User ID required' });
+  if (userId === req.session.userId) return res.status(400).json({ error: 'Cannot follow yourself' });
+  // Check if already following
+  const exists = await dbService.query('SELECT * FROM follows WHERE follower_id = ? AND following_id = ?', [req.session.userId, userId]);
+  if (exists.length > 0) return res.status(400).json({ error: 'Already following this user' });
+  await dbService.run('INSERT INTO follows (follower_id, following_id) VALUES (?, ?)', [req.session.userId, userId]);
+  res.json({ success: true });
+});
 
   // Unfollow a user
   app.delete('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
@@ -754,6 +742,17 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       res.status(500).json({ error: 'Server error' });
     }
   });
+
+  // Get followed users
+app.get('/api/follows', ensureLoggedIn, async (req, res) => {
+  const users = await dbService.query(
+    `SELECT u.id, u.username FROM users u
+     JOIN follows f ON u.id = f.following_id
+     WHERE f.follower_id = ?`,
+    [req.session.userId]
+  );
+  res.json(users);
+});
 
   return app;
 }
