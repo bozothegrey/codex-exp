@@ -12,19 +12,19 @@ let server;
 async function initializeTestApp() {
   console.log('Starting database setup...');
   testDb = await setupTestDatabase();
+  await testDb.initialized;
   console.log('Database setup complete');
   
-  // Create test app instance using the actual server implementation
+  // Create test app instance using the actual server implementation, passing testDb
   app = createApp({
     secret: 'test-secret',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false }
-  });
+  }, testDb);
   
-  // Override default database with test database
-  app.locals.dbService = testDb;
-  app.locals.dbReady = true;
+  //app.locals.dbService = testDb;
+  //app.locals.dbReady = true;
   
   // Start the server on a random port
   return new Promise((resolve) => {
@@ -72,10 +72,13 @@ afterAll(async () => {
 });
 
 async function setupTestDatabase() {
-  const dbService = new DatabaseService(':memory:');
-  await initializeDatabase(dbService, false); // Skip default users for tests
+  const dbService = new DatabaseService('file:memdb1?mode=memory&cache=shared');
+  // Initialize schema
+  const { initializeDatabase } = require('../db/init');
+  await initializeDatabase(dbService, false); // Don't insert default users for tests
   return dbService;
 }
+
 
 async function createTestSession(userId, date = '2025-06-08') {
   const response = await request(app)
@@ -105,13 +108,9 @@ async function loginTestUser(username, password) {
       throw new Error('Login failed - no cookies received');
     }
     
-    return response.headers['set-cookie']
-      .map(cookie => cookie.split(';')[0])
-      .join('; ');
+    return response.headers['set-cookie'];
   } catch (err) {
     console.error('Login error:', err);
     throw err;
   }
 }
-
-// Remove duplicate exports

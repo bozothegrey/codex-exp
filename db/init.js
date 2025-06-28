@@ -1,6 +1,6 @@
 const bcrypt = require('bcrypt');
 
-async function initializeDatabase(dbService, insertDefaultUsers = true) {
+async function initializeDatabase(dbService, insertDefaultUsers = false) {
     try {
         // Create all tables with IF NOT EXISTS to be idempotent
         await dbService.run(`CREATE TABLE IF NOT EXISTS users (
@@ -62,6 +62,35 @@ async function initializeDatabase(dbService, insertDefaultUsers = true) {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
+        await dbService.run(`CREATE TABLE IF NOT EXISTS certifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activity_id INTEGER NOT NULL,
+            certifier_id INTEGER NOT NULL,
+            activity_type TEXT NOT NULL,
+            certified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(activity_id, certifier_id),
+            FOREIGN KEY (activity_id) REFERENCES sets(id) ON DELETE CASCADE,
+            FOREIGN KEY (certifier_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        await dbService.run(`CREATE TABLE IF NOT EXISTS challenges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            challenged_user_id INTEGER NOT NULL,
+            challenger_user_id INTEGER NOT NULL,
+            challenged_activity_id INTEGER NOT NULL,
+            resolving_activity_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL CHECK(status IN ('open', 'closed', 'expired')),
+            expires_at TIMESTAMP,
+            closed_at TIMESTAMP,
+            resolution_reason TEXT,
+            FOREIGN KEY (challenged_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (challenger_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (challenged_activity_id) REFERENCES sets(id) ON DELETE CASCADE,
+            FOREIGN KEY (resolving_activity_id) REFERENCES sets(id) ON DELETE CASCADE
+        )`);
+        
+
         // Insert default users if requested and none exist
         if (insertDefaultUsers) {
             const defaultUsers = [
@@ -72,7 +101,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = true) {
             const row = await dbService.query('SELECT COUNT(*) as count FROM users');
             if (row[0].count === 0) {
                 for (const u of defaultUsers) {
-                    const hash = await bcrypt.hash(u.password, 10);
+                    const hash = await bcrypt.hash(u.password, 10);                    
                     await dbService.run(
                         'INSERT INTO users (username, password) VALUES (?, ?)', 
                         [u.username, hash]
@@ -80,6 +109,12 @@ async function initializeDatabase(dbService, insertDefaultUsers = true) {
                 }
             }
         }
+
+        // Print all tables in the database
+        const tables = await dbService.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        );
+        console.log('Database tables:', tables.map(t => t.name).join(', '));
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err; // Re-throw to allow callers to handle
