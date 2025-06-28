@@ -17,10 +17,13 @@ class DatabaseService extends EventEmitter {
   }
 
   createConnection() {
-    const db = new sqlite3.Database(this.dbFile);
-    db.run('PRAGMA foreign_keys = ON');
-    return db;
-  }
+  const db = new sqlite3.Database(
+    this.dbFile,
+    this.dbFile.startsWith('file:') ? { uri: true } : undefined
+  );
+  db.run('PRAGMA foreign_keys = ON');
+  return db;
+}
 
   async getConnection() {
     if (this.pool.length > 0) {

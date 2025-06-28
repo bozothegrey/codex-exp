@@ -73,10 +73,8 @@ document.getElementById('findUserBtn').addEventListener('click', async () => {
       const user = await res.json();
       resultDiv.innerHTML = `<span>Username: <b>${user.username}</b></span> <button id="followUserBtn" class="follow-tick" title="Follow">&#10003;</button>`;
       document.getElementById('followUserBtn').onclick = async () => {
-        const followRes = await fetch('/api/follow', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id })
+        const followRes = await fetch(`/api/follow/${user.id}`, {
+          method: 'POST'
         });
         if (followRes.ok) {
           addFollowedUserToList(user);

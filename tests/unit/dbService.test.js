@@ -82,4 +82,30 @@ describe('DatabaseService', () => {
       );
     });
   });
+
+  describe('Database Initialization', () => {
+    it('should initialize all required tables in memory', async () => {
+      // Initialize database with all tables
+      const { initializeDatabase } = require('../../db/init');
+      await initializeDatabase(dbService, false); // Don't insert default users
+
+      // Verify all expected tables exist
+      const tables = await dbService.query(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      );
+      const tableNames = tables.map(t => t.name);
+      
+      const expectedTables = [
+        'users', 'sessions', 'exercises', 'sets', 'follows',
+        'notifications', 'user_activities', 'certifications', 'challenges'
+      ];
+      
+      for (const table of expectedTables) {
+        assert.ok(
+          tableNames.includes(table),
+          `Expected table ${table} to exist`
+        );
+      }
+    });
+  });
 });

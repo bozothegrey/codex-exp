@@ -4,14 +4,14 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const DatabaseService = require('./db/dbService');
 const { initializeDatabase } = require('./db/init');
+const { setupChallengeJobs } = require('./db/challengeJobs');
 
 const PORT = process.env.PORT || 3000;
 const DB_FILE = process.env.DB_FILE || 'gym.db';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'secret-key';
 
-function createApp(sessionConfig = {}) {
+function createApp(sessionConfig = {}, dbService) {
   const app = express();
-  const dbService = new DatabaseService(DB_FILE);
   let dbReady = false;
   
   // Default session config
@@ -39,7 +39,9 @@ function createApp(sessionConfig = {}) {
   });
 
   initializeDatabase(dbService).then(() => {
-    dbReady = true;    
+    dbReady = true;
+    // Start scheduled challenge jobs
+    setupChallengeJobs(dbService);
   }).catch(err => {
     console.error('Database initialization failed:', err);
     process.exit(1);
@@ -596,9 +598,9 @@ app.get('/api/user', async (req, res) => {
   res.json(users[0]);
 });
 
-// Follow user endpoint
-app.post('/api/follow', ensureLoggedIn, async (req, res) => {
-  const { userId } = req.body;
+// Follow user endpoint (now uses path parameter)
+app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
+  const userId = parseInt(req.params.userId, 10);
   if (!userId) return res.status(400).json({ error: 'User ID required' });
   if (userId === req.session.userId) return res.status(400).json({ error: 'Cannot follow yourself' });
   // Check if already following
@@ -754,6 +756,74 @@ app.get('/api/follows', ensureLoggedIn, async (req, res) => {
   res.json(users);
 });
 
+// Create a challenge
+app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
+  const { challenged_activity_id, challenged_user_id, expires_at } = req.body;
+  const challenger_user_id = req.session.userId;
+  if (!challenged_activity_id || !challenged_user_id) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  // Check if activity is already certified
+  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ?', [challenged_activity_id]);
+  if (certified.length > 0) {
+    return res.status(400).json({ error: 'Activity already certified' });
+  }
+  // Check if already challenged
+  const existing = await dbService.query('SELECT 1 FROM challenges WHERE challenged_activity_id = ? AND status = "open"', [challenged_activity_id]);
+  if (existing.length > 0) {
+    return res.status(400).json({ error: 'Activity already challenged' });
+  }
+  await dbService.run(
+    `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES (?, ?, ?, 'open', ?)`,
+    [challenged_user_id, challenger_user_id, challenged_activity_id, expires_at || null]
+  );
+  res.json({ success: true });
+});
+
+// Certify an activity
+app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
+  const { activity_id } = req.body;
+  const certifier_id = req.session.userId;
+  if (!activity_id) return res.status(400).json({ error: 'Missing activity_id' });
+  // Check if already certified
+  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ? AND certifier_id = ?', [activity_id, certifier_id]);
+  if (certified.length > 0) return res.status(400).json({ error: 'Already certified' });
+
+  // Detect activity type (for now, only 'set')
+  let activityType = 'set';
+  const setRow = await dbService.query('SELECT id FROM sets WHERE id = ?', [activity_id]);
+  if (!setRow.length) {
+    // In the future, check other activity tables here
+    return res.status(400).json({ error: 'Unknown activity type' });
+  }
+
+  await dbService.run(
+    `INSERT INTO certifications (activity_id, certifier_id, activity_type) VALUES (?, ?, ?)`,
+    [activity_id, certifier_id, activityType]
+  );
+  // Close any open challenges on this activity
+  await dbService.run(
+    `UPDATE challenges SET status = 'closed', closed_at = CURRENT_TIMESTAMP, resolution_reason = 'certified' WHERE challenged_activity_id = ? AND status = 'open'`,
+    [activity_id]
+  );
+  res.json({ success: true });
+});
+
+
+// List open/closed challenges for a user
+app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
+  const userId = req.session.userId;
+  const { status } = req.query; // 'open', 'closed', or undefined for all
+  let query = 'SELECT * FROM challenges WHERE challenged_user_id = ?';
+  const params = [userId];
+  if (status) {
+    query += ' AND status = ?';
+    params.push(status);
+  }
+  const challenges = await dbService.query(query, params);
+  res.json(challenges);
+});
+
   return app;
 }
 
@@ -761,7 +831,8 @@ module.exports = createApp;
 
 // If run directly, start the server
 if (require.main === module) {
-  const app = createApp();
+  const dbService = new DatabaseService(DB_FILE);
+  const app = createApp({}, dbService);
   app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
   });
