@@ -17,64 +17,65 @@
   </header>
 
   <div class="main-content">
-    <div class="left-column">
-      <form id="sessionForm">
-      <label for="date">Date:</label>
-      <input type="date" id="date" required>
-      <button type="submit">Start Session</button>
-      </form>
-
-      <table id="sessionsTable">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-
-    <div class="right-column">
-      <div class="follow-section">
-        <h3>Follow Users</h3>
-        <div class="follow-controls">
-          <input type="text" id="userSearchInput" placeholder="Enter username to find">
-          <button id="findUserBtn">Find</button>
+    <div class="swipe-container" id="swipeContainer">
+      <div class="left-column" id="leftColumn">
+        <form id="sessionForm">
+        <label for="date">Date:</label>
+        <input type="date" id="date" required>
+        <button type="submit">Start Session</button>
+        </form>
+        <table id="sessionsTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>    
+      <div class="right-column" id="rightColumn">
+        <div class="follow-section">
+          <h3>Follow Users</h3>
+          <div class="follow-controls">
+            <input type="text" id="userSearchInput" placeholder="Enter username to find">
+            <button id="findUserBtn">Find</button>
+          </div>
+          <div id="userSearchResult"></div>
+          <ul id="followedUsersList"></ul>
         </div>
-        <div id="userSearchResult"></div>
-        <ul id="followedUsersList"></ul>
-      </div>
-      
-      <div class="notifications-section">
-        <h3>Notifications</h3>
-        <ul id="notificationsList"></ul>
-      </div>
-
-      <!-- Challenges Received Block -->
-      <div class="challenges-section" id="challengesReceivedSection">
-        <h3>Challenges Received</h3>
-        <div class="challenge-filters">
-          <button class="challenge-filter-btn" data-status="open" id="receivedFilterOpen">Active</button>
-          <button class="challenge-filter-btn" data-status="closed" id="receivedFilterClosed">Closed</button>
-          <button class="challenge-filter-btn" data-status="both" id="receivedFilterBoth">All</button>
+        
+        <div class="notifications-section">
+          <h3>Notifications</h3>
+          <ul id="notificationsList"></ul>
         </div>
-        <ul id="challengesReceivedList"></ul>
-      </div>
 
-      <!-- Challenges Given Block -->
-      <div class="challenges-section" id="challengesGivenSection">
-        <h3>Challenges Given</h3>
-        <div class="challenge-filters">
-          <button class="challenge-filter-btn" data-status="open" id="givenFilterOpen">Active</button>
-          <button class="challenge-filter-btn" data-status="closed" id="givenFilterClosed">Closed</button>
-          <button class="challenge-filter-btn" data-status="both" id="givenFilterBoth">All</button>
+        <!-- Challenges Received Block -->
+        <div class="challenges-section" id="challengesReceivedSection">
+          <h3>Challenges Received</h3>
+          <div class="challenge-filters">
+            <button class="challenge-filter-btn" data-status="open" id="receivedFilterOpen">Active</button>
+            <button class="challenge-filter-btn" data-status="closed" id="receivedFilterClosed">Closed</button>
+            <button class="challenge-filter-btn" data-status="both" id="receivedFilterBoth">All</button>
+          </div>
+          <ul id="challengesReceivedList"></ul>
         </div>
-        <ul id="challengesGivenList"></ul>
+
+        <!-- Challenges Given Block -->
+        <div class="challenges-section" id="challengesGivenSection">
+          <h3>Challenges Given</h3>
+          <div class="challenge-filters">
+            <button class="challenge-filter-btn" data-status="open" id="givenFilterOpen">Active</button>
+            <button class="challenge-filter-btn" data-status="closed" id="givenFilterClosed">Closed</button>
+            <button class="challenge-filter-btn" data-status="both" id="givenFilterBoth">All</button>
+          </div>
+          <ul id="challengesGivenList"></ul>
+        </div>
       </div>
     </div>
   </div>
   <script src="script.js"></script>
+  <script src="swipe.js"></script>
 </body>
 </html>
