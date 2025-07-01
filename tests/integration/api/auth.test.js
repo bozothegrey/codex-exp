@@ -1,22 +1,20 @@
 const request = require('supertest');
-const { initializeTestApp } = require('../../testHelpers');
+const { createTestApp, loginTestUser, createTestUser, testDb } = require('../../testHelpers');
 
+let app, server, address;
 let testRequest;
-let testServer;
 
-beforeAll(async () => {
-  jest.setTimeout(20000);
-  
-  // Initialize test database and app
-  const { server, address, db } = await initializeTestApp();
-  testServer = server;
+beforeAll(async () => {  
+  const result = await createTestApp();
+  app = result.app;
+  server = result.server;
+  address = result.address;
   testRequest = request(address);
 });
 
 afterAll(async () => {
-  if (testServer) {    
-    testServer.close();
-  }
+  await new Promise((resolve) => server.close(resolve));
+  await testDb.close();
 });
 
 describe('Authentication API', () => {  
@@ -24,9 +22,10 @@ describe('Authentication API', () => {
   let sessionCookie;
 
   beforeEach(async () => {
+    const { v4: uuidv4 } = require('uuid');
     // Create unique test user via API
     testUser = {
-      username: `testuser_${Date.now()}`,
+      username: `testuser_${uuidv4()}`,
       password: 'testpass'
     };
     

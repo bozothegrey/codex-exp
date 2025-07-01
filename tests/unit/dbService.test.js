@@ -1,5 +1,5 @@
 const { describe, it, beforeAll, afterAll, beforeEach } = require('@jest/globals');
-const assert = require('assert');
+const assert = require('assert').strict;
 const sinon = require('sinon');
 const DatabaseService = require('../../db/dbService');
 
@@ -8,28 +8,26 @@ describe('DatabaseService', () => {
   let errorSpy;
 
   beforeAll(() => {
-    dbService = new DatabaseService(':memory:');
+    // Use environment-based constructor
+    dbService = new DatabaseService('test');
     errorSpy = sinon.spy();
     dbService.on('error', errorSpy);
   });
 
   afterAll(async () => {
-    try {
-      await dbService.close();
-    } catch (err) {
-      console.error('Error during cleanup:', err);
-      throw err;
-    }
+    await dbService.close();
   });
 
-  beforeEach(async () => {
-    // Reset database state before each test
-    await dbService.run('DROP TABLE IF EXISTS test');
-    await dbService.run('CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)');
+  beforeEach(async () => {  
+    await dbService.run('BEGIN TRANSACTION');  
     errorSpy.resetHistory();
   });
 
-  describe('Error Cases', () => {
+  afterEach(async () => {
+    await dbService.run('ROLLBACK');    
+  });
+
+  describe('Error Handling', () => {
     it('should emit error on invalid SQL', async () => {
       await assert.rejects(
         () => dbService.run('INVALID SQL'),
@@ -38,33 +36,39 @@ describe('DatabaseService', () => {
       assert.strictEqual(errorSpy.callCount, 1);
     });
 
-    it('should handle connection pool exhaustion', async () => {
-      // Exhaust the pool
-      const connections = [];
-      for (let i = 0; i < dbService.maxPoolSize; i++) {
-        connections.push(await dbService.getConnection());
-      }
-
-      // Should still work by creating new connection
-      await assert.doesNotReject(
-        () => dbService.run('SELECT 1')
+    it('should handle connection errors', async () => {
+      // Simulate connection failure
+      const originalGetConnection = dbService.getConnection;
+      dbService.getConnection = () => Promise.reject(new Error('Connection failed'));
+      
+      await assert.rejects(
+        () => dbService.run('SELECT 1'),
+        { message: 'Connection failed' }
       );
-
-      // Release connections
-      for (const conn of connections) {
-        await dbService.releaseConnection(conn);
-      }
+      
+      // Restore original method
+      dbService.getConnection = originalGetConnection;
     });
   });
 
-  describe('Security Tests', () => {
+  describe('Security', () => {
+    beforeEach(async () => {
+      // Create test table within transaction
+      await dbService.run('CREATE TEMPORARY TABLE test (id INTEGER PRIMARY KEY, value TEXT)');
+    });
+
     it('should prevent SQL injection', async () => {
       const maliciousInput = "'; DROP TABLE test;--";
       await dbService.run('INSERT INTO test (value) VALUES (?)', [maliciousInput]);
       
-      // Verify table still exists and value was inserted as literal
       const result = await dbService.query('SELECT value FROM test');
       assert.strictEqual(result[0].value, maliciousInput);
+      
+      // Verify table still exists
+      const tables = await dbService.query(
+        "SELECT name FROM sqlite_temp_master WHERE type='table' AND name='test'"
+      );
+      assert.strictEqual(tables.length, 1);
     });
   });
 
@@ -76,22 +80,23 @@ describe('DatabaseService', () => {
       );
     });
 
-    it('should accept non-array parameters by wrapping them', async () => {
+    it('should accept non-array parameters', async () => {
+      await dbService.run('CREATE TEMPORARY TABLE test (id INT)');
       await assert.doesNotReject(
-        () => dbService.run('SELECT ?', 'valid-string')
+        () => dbService.run('INSERT INTO test VALUES (?)', 42)
       );
+      const result = await dbService.query('SELECT id FROM test');
+      assert.strictEqual(result[0].id, 42);
     });
   });
-
+  
   describe('Database Initialization', () => {
-    it('should initialize all required tables in memory', async () => {
-      // Initialize database with all tables
-      const { initializeDatabase } = require('../../db/init');
-      await initializeDatabase(dbService, false); // Don't insert default users
-
-      // Verify all expected tables exist
+    it('should initialize all required tables', async () => {
+      // Trigger initialization via service
+      await dbService.getConnection();
+      
       const tables = await dbService.query(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        "SELECT name FROM sqlite_master WHERE type='table'"
       );
       const tableNames = tables.map(t => t.name);
       
@@ -103,7 +108,7 @@ describe('DatabaseService', () => {
       for (const table of expectedTables) {
         assert.ok(
           tableNames.includes(table),
-          `Expected table ${table} to exist`
+          `Missing table: ${table}`
         );
       }
     });

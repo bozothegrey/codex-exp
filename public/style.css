@@ -28,7 +28,7 @@ header {
   flex: 1;
 }
 
-.follow-section, .notifications-section {
+.follow-section, .notifications-section, .challenges-section {
   background-color: white;
   padding: 10px;
   margin-bottom: 10px;
@@ -86,7 +86,7 @@ th, td {
   background: none;
 }
 
-#followedUsersList, #notificationsList {
+#followedUsersList, #notificationsList, #challengesReceivedList, #challengesGivenList {
   list-style-type: none;
   padding: 0;
   margin: 5px 0;
@@ -94,6 +94,47 @@ th, td {
 
 #followedUsersList li, #notificationsList li {
   padding: 2px 0;
+}
+
+.challenge-filters {
+  margin-bottom: 6px;
+}
+
+.challenge-filter-btn {
+  background: #f6f6ef;
+  border: 1px solid #dcdcdc;
+  color: #333;
+  padding: 2px 8px;
+  margin-right: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10pt;
+  transition: background 0.2s;
+}
+.challenge-filter-btn:disabled {
+  background: #ff6600;
+  color: #fff;
+  cursor: default;
+}
+.challenge-filter-btn:not(:disabled):hover {
+  background: #ffe0b3;
+}
+
+.challenge-item {
+  border-bottom: 1px solid #eee;
+  padding: 4px 0 6px 0;
+  font-size: 10pt;
+}
+.challenge-item:last-child {
+  border-bottom: none;
+}
+.challenge-status.open {
+  color: #1ca21c;
+  font-weight: bold;
+}
+.challenge-status.closed {
+  color: #b00;
+  font-weight: bold;
 }
 
 @media (max-width: 600px) {
@@ -119,4 +160,45 @@ th, td {
   text-decoration: underline;
   color: #000000;
   background: none;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin-left: 6px;
+  cursor: pointer;
+  vertical-align: middle;
+  outline: none;
+  transition: background 0.15s;
+}
+.icon-btn svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+.certify-btn svg circle {
+  stroke: #1ca21c;
+}
+.certify-btn.done svg circle {
+  stroke: #aaa;
+}
+.challenge-btn svg rect:first-child {
+  fill: #ff6600;
+}
+.challenge-btn svg rect:not(:first-child) {
+  fill: #888;
+}
+.challenge-btn.done svg rect:first-child {
+  fill: #aaa;
+}
+.icon-btn:focus {
+  background: #ffe0b3;
+  border-radius: 3px;
+}
+
+#notificationsList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
 }

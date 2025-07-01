@@ -41,7 +41,7 @@ function createApp(sessionConfig = {}, dbService) {
   initializeDatabase(dbService).then(() => {
     dbReady = true;
     // Start scheduled challenge jobs
-    setupChallengeJobs(dbService);
+    // TODO: setupChallengeJobs(dbService);
   }).catch(err => {
     console.error('Database initialization failed:', err);
     process.exit(1);
@@ -68,19 +68,18 @@ function createApp(sessionConfig = {}, dbService) {
   // Auth routes
 app.post('/api/login', async (req, res) => {
   try {
-    console.log('Login attempt:', { username: req.body.username });
+    
     const { username, password } = req.body;
     const rows = await dbService.query('SELECT * FROM users WHERE username = ?', [username]);    
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     
     const row = rows[0];
     const match = await bcrypt.compare(password, row.password);
-    if (!match) {
-      console.log('Password mismatch for user:', username);
+    if (!match) {      
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    console.log('Successful login for user:', username);
+    
     req.session.userId = row.id;
     req.session.username = row.username;
     req.session.save(err => {
@@ -222,18 +221,19 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'date is required' });
       }
 
-      const result = await dbService.run(
+      const { lastID } = await dbService.run(
         'INSERT INTO sessions (user_id, date) VALUES (?, ?)',
         [req.session.userId, date]
       );
 
       const session = {
-        id: result.lastID,
+        id: lastID,
         date,
         closed: 0,
         user_id: req.session.userId
       };
-
+      console.log(`Created session ${session.id} for user ${req.session.userId}`);
+      
       dbService.emit('session:created', session);
       res.json(session);
     } catch (err) {
@@ -245,7 +245,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
     try {
       const sessionId = parseInt(req.params.id);
       const userId = req.session.userId;
-
+      console.log(`Deleting session ${sessionId} for user ${userId}`);
       if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
@@ -444,7 +444,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       const { reps, weight } = req.body;
       const userId = req.session.userId;
       let set;
-      console.log('About to call insert an exercise for userId', userId);
+      
 
       if (exerciseId == null) {
         return res.status(400).json({ error: 'ExerciseId is required' });
@@ -454,7 +454,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'reps is required' });
       }
 
-      console.log('Checking exerciseId ', exerciseId, 'exists for userId', userId);
+      
       const exercise = await dbService.query(
         `SELECT e.* FROM exercises e
          JOIN sessions s ON e.session_id = s.id
@@ -466,7 +466,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         return res.status(404).json({ error: 'exercise not found' });
       }
 
-      console.log('Inserting set');
+      
       try {
         const result = await dbService.run(
           'INSERT INTO sets (exercise_id, reps, weight) VALUES (?, ?, ?)',
@@ -484,8 +484,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         console.error('Error inserting set:', err);
       }    
 
-      // Notify followers of new set logged
-      console.log('About to call notifyFollowers for userId', userId, 'with set', set);
+      // Notify followers of new set logged      
       try {
         await notifyFollowers(userId, 'set_logged', {
           userId: userId,
@@ -704,11 +703,12 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
   // Helper function to create notifications for followers
   async function notifyFollowers(userId, activityType, activityData) {
     try {
-      // First log the activity
-      await dbService.run(
+      // First log the activity and get its ID
+      const activityResult = await dbService.run(
         'INSERT INTO user_activities (user_id, type, data) VALUES (?, ?, ?)',
         [userId, activityType, JSON.stringify(activityData)]
       );
+      const activityId = activityResult.lastID;
 
       // Get followers
       const followers = await dbService.query(
@@ -717,15 +717,15 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
          WHERE following_id = ?`,
         [userId]
       );
-      console.log('notifyFollowers: userId', userId, 'activityType', activityType, 'followers', followers);
+      
 
       // Notify each follower
       for (const follower of followers) {
         await dbService.run(
-          `INSERT INTO notifications (user_id, type, data) VALUES (?, ?, ?)`,
-          [follower.follower_id, activityType, JSON.stringify(activityData)]
+          `INSERT INTO notifications (user_id, activity_id, type, data) VALUES (?, ?, ?, ?)`,
+          [follower.follower_id, activityId, activityType, JSON.stringify(activityData)]
         );
-        console.log(`Notification created for follower_id=${follower.follower_id}, type=${activityType}`);
+        
       }
     } catch (err) {
       console.error('Error notifying followers:', err);
@@ -733,8 +733,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
   }
 
   // Get current user info
-  app.get('/api/me', ensureLoggedIn, async (req, res) => {
-    console.log(`Calling api/me for userId: ${req.session.userId}`);
+  app.get('/api/me', ensureLoggedIn, async (req, res) => {    
     try {
       const userId = req.session.userId;
       const user = await dbService.query('SELECT id, username FROM users WHERE id = ?', [userId]);
@@ -756,12 +755,16 @@ app.get('/api/follows', ensureLoggedIn, async (req, res) => {
   res.json(users);
 });
 
-// Create a challenge
+  // Create a challenge
 app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
   const { challenged_activity_id, challenged_user_id, expires_at } = req.body;
   const challenger_user_id = req.session.userId;
   if (!challenged_activity_id || !challenged_user_id) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+  // Prevent self-challenges
+  if (challenger_user_id === challenged_user_id) {
+    return res.status(400).json({ error: 'Cannot challenge your own activity' });
   }
   // Check if activity is already certified
   const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ?', [challenged_activity_id]);
@@ -786,8 +789,20 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
   const certifier_id = req.session.userId;
   if (!activity_id) return res.status(400).json({ error: 'Missing activity_id' });
   // Check if already certified
-  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ? AND certifier_id = ?', [activity_id, certifier_id]);
+  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ? ', [activity_id]);
   if (certified.length > 0) return res.status(400).json({ error: 'Already certified' });
+
+  // Prevent self-certification by checking activity owner
+  const activityOwner = await dbService.query(
+    `SELECT s.id FROM sets s
+     JOIN exercises e ON s.exercise_id = e.id
+     JOIN sessions sess ON e.session_id = sess.id
+     WHERE s.id = ? AND sess.user_id = ?`,
+    [activity_id, certifier_id]
+  );
+  if (activityOwner.length > 0) {
+    return res.status(400).json({ error: 'Cannot certify your own activity' });
+  }
 
   // Detect activity type (for now, only 'set')
   let activityType = 'set';
@@ -797,7 +812,8 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
     return res.status(400).json({ error: 'Unknown activity type' });
   }
 
-  await dbService.run(
+  
+  await dbService.run(    
     `INSERT INTO certifications (activity_id, certifier_id, activity_type) VALUES (?, ?, ?)`,
     [activity_id, certifier_id, activityType]
   );
@@ -810,18 +826,55 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
 });
 
 
-// List open/closed challenges for a user
+// List challenges for a user with status filtering
 app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
-  const userId = req.session.userId;
-  const { status } = req.query; // 'open', 'closed', or undefined for all
-  let query = 'SELECT * FROM challenges WHERE challenged_user_id = ?';
-  const params = [userId];
-  if (status) {
-    query += ' AND status = ?';
-    params.push(status);
+  try {
+    const userId = req.session.userId;
+    const { status = 'both' } = req.query;
+    
+    // Validate status parameter
+    if (!['open', 'closed', 'both'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
+    }
+
+    let query = 'SELECT * FROM challenges WHERE challenged_user_id = ?';
+    const params = [userId];
+    
+    if (status !== 'both') {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+
+    const challenges = await dbService.query(query, params);
+    res.json(challenges);
+  } catch (err) {
+    handleError(res, err);
   }
-  const challenges = await dbService.query(query, params);
-  res.json(challenges);
+});
+
+// List challenges given by a user with status filtering
+app.get('/api/challenges/given', ensureLoggedIn, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const { status = 'both' } = req.query;
+    
+    if (!['open', 'closed', 'both'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
+    }
+
+    let query = 'SELECT * FROM challenges WHERE challenger_user_id = ?';
+    const params = [userId];
+    
+    if (status !== 'both') {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+
+    const challenges = await dbService.query(query, params);
+    res.json(challenges);
+  } catch (err) {
+    handleError(res, err);
+  }
 });
 
   return app;

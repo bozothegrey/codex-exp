@@ -10,5 +10,5 @@ module.exports = {
     '/node_modules/',
     '/tests/'
   ],
-  setupFilesAfterEnv: ['@testing-library/jest-dom']
+  setupFilesAfterEnv: ['@testing-library/jest-dom'],  
 }
