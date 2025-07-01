@@ -13,9 +13,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             date TEXT NOT NULL,
-            closed INTEGER DEFAULT 0,
-            activity TEXT,
-            duration INTEGER,
+            closed INTEGER DEFAULT 0,            
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
 
@@ -43,16 +41,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
             FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
-        await dbService.run(`CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            type TEXT NOT NULL,
-            data TEXT NOT NULL,
-            is_read BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )`);
-
+        // user_activities must be created before notifications due to FK
         await dbService.run(`CREATE TABLE IF NOT EXISTS user_activities (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -60,6 +49,18 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
             data TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        await dbService.run(`CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            activity_id INTEGER,
+            type TEXT NOT NULL,
+            data TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (activity_id) REFERENCES user_activities(id) ON DELETE SET NULL
         )`);
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS certifications (
@@ -89,7 +90,6 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
             FOREIGN KEY (challenged_activity_id) REFERENCES sets(id) ON DELETE CASCADE,
             FOREIGN KEY (resolving_activity_id) REFERENCES sets(id) ON DELETE CASCADE
         )`);
-        
 
         // Insert default users if requested and none exist
         if (insertDefaultUsers) {
@@ -110,11 +110,6 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
             }
         }
 
-        // Print all tables in the database
-        const tables = await dbService.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        );
-        console.log('Database tables:', tables.map(t => t.name).join(', '));
     } catch (err) {
         console.error('Database initialization failed:', err);
         throw err; // Re-throw to allow callers to handle

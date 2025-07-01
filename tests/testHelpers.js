@@ -1,35 +1,28 @@
-const express = require('express');
 const request = require('supertest');
-const session = require('express-session');
 const createApp = require('../server');
 const DatabaseService = require('../db/dbService');
-const { initializeDatabase } = require('../db/init');
 
-let testDb;
+// Shared persistent in-memory database instance for all tests
+const testDb = new DatabaseService('test');
+
 let app;
 let server;
 
-async function initializeTestApp() {
-  console.log('Starting database setup...');
-  testDb = await setupTestDatabase();
-  await testDb.initialized;
-  console.log('Database setup complete');
-  
-  // Create test app instance using the actual server implementation, passing testDb
+async function createTestApp() {
+  // Ensure the database is initialized only once
+  await testDb.getConnection(); // Triggers schema initialization if not already done
+
+  // Create test app instance, passing the shared database service
   app = createApp({
     secret: 'test-secret',
     resave: false,
     saveUninitialized: false,
     cookie: { secure: false }
   }, testDb);
-  
-  //app.locals.dbService = testDb;
-  //app.locals.dbReady = true;
-  
+
   // Start the server on a random port
   return new Promise((resolve) => {
     server = app.listen(0, () => {
-      console.log(`Test server listening on port ${server.address().port}`);
       resolve({
         app,
         server,
@@ -39,46 +32,6 @@ async function initializeTestApp() {
     });
   });
 }
-
-// Initialize the test app
-beforeAll(async () => {
-  await initializeTestApp();
-});
-
-// Export all test helpers
-module.exports = {
-  setupTestDatabase,
-  createTestSession,
-  createTestExercise,
-  loginTestUser,
-  initializeTestApp,
-  app,
-  testDb
-};
-
-afterAll(async () => {
-  try {
-    if (testDb) {
-      await testDb.close();
-      console.log('Database connection closed');
-    }
-    if (server) {
-      await new Promise(resolve => server.close(resolve));
-      console.log('Test server closed');
-    }
-  } catch (err) {
-    console.error('Cleanup error:', err);
-  }
-});
-
-async function setupTestDatabase() {
-  const dbService = new DatabaseService('file:memdb1?mode=memory&cache=shared');
-  // Initialize schema
-  const { initializeDatabase } = require('../db/init');
-  await initializeDatabase(dbService, false); // Don't insert default users for tests
-  return dbService;
-}
-
 
 async function createTestSession(userId, date = '2025-06-08') {
   const response = await request(app)
@@ -92,6 +45,27 @@ async function createTestExercise(sessionId, name = 'Bench Press') {
     .post(`/api/sessions/${sessionId}/exercises`)
     .send({ name });
   return response.body.id;
+}
+
+async function createTestUser(username, password) {
+  try {
+    const response = await request(app)
+      .post('/api/register')
+      .send({ 
+        username, 
+        password
+      });
+    
+    if (!response.headers['set-cookie']) {
+      console.error('User Creation failed - response:', response.status, response.body);
+      throw new Error('User creation failed - no cookies received');
+    }
+    
+    return response.headers['set-cookie'];
+  } catch (err) {
+    console.error('User creation error:', err);
+    throw err;
+  }
 }
 
 async function loginTestUser(username, password) {
@@ -114,3 +88,14 @@ async function loginTestUser(username, password) {
     throw err;
   }
 }
+
+// Export all test helpers
+module.exports = {
+  createTestApp,  
+  createTestSession,
+  createTestExercise,
+  createTestUser,
+  loginTestUser,  
+  app,
+  testDb
+};

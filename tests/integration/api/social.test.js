@@ -1,44 +1,30 @@
 const request = require('supertest');
-const { initializeTestApp, loginTestUser } = require('../../testHelpers');
+const { createTestApp, loginTestUser, testDb } = require('../../testHelpers');
 
+let app, server, address;
 let testRequest;
-let testServer;
-let testDb;
 
-beforeAll(async () => {
-  jest.setTimeout(20000);
-  
-  try {
-    // Properly await database initialization
-    const { server, address, db } = await initializeTestApp();
-    testServer = server;
-    testRequest = request(address);
-    testDb = db;
-    
-    // Verify database is initialized
-    const tables = await db.query("SELECT name FROM sqlite_master WHERE type='table'");
-    console.log('Initialized tables:', tables.map(t => t.name));
-  } catch (err) {
-    console.error('Test setup failed:', err);
-    throw err; // Fail the test setup
-  }
+beforeAll(async () => {  
+  const result = await createTestApp();
+  app = result.app;
+  server = result.server;
+  address = result.address;
+  testRequest = request(address);
 });
 
 afterAll(async () => {
-  if (testServer) {
-    await new Promise(resolve => testServer.close(resolve));
-  }
-  if (testDb) {
-    await testDb.close();
-  }
+  await new Promise((resolve) => server.close(resolve));
+  await testDb.close();
 });
 
 describe('Social Features API', () => {  
   let userA, userB, cookieA, cookieB, userAId, userBId, sessionId;
 
   beforeEach(async () => {
-    userA = { username: `userA_${Date.now()}`, password: 'passA' };
-    userB = { username: `userB_${Date.now()}`, password: 'passB' };
+    // Create unique test user via API
+    const { v4: uuidv4 } = require('uuid');
+    userA = { username: `userA_${uuidv4()}`, password: 'passA' };    
+    userB = { username: `userB_${uuidv4()}`, password: 'passB' };
     
     // Register users
     await testRequest.post('/api/register').send(userA);
@@ -92,10 +78,7 @@ describe('Social Features API', () => {
         .send({ reps: 10, weight: 50 });
     // User A checks notifications
     const notifResA = await testRequest.get('/api/notifications').set('Cookie', cookieA[0]);
-    console.log('User A notifications:', JSON.stringify(notifResA.body, null, 2));
-    // User B checks notifications
-    const notifResB = await testRequest.get('/api/notifications').set('Cookie', cookieB[0]);
-    console.log('User B notifications:', JSON.stringify(notifResB.body, null, 2));
+    console.log('User A notifications:', JSON.stringify(notifResA.body, null, 2));        
     expect(notifResA.status).toBe(200);
     expect(Array.isArray(notifResA.body)).toBe(true);
     expect(notifResA.body.some(n => n.type === 'set_logged')).toBe(true);
