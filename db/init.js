@@ -3,20 +3,26 @@ const bcrypt = require('bcrypt');
 async function initializeDatabase(dbService, insertDefaultUsers = false) {
     try {
         // Create all tables with IF NOT EXISTS to be idempotent
+        // TODO admin rights for exerciuses creation, location create etc
         await dbService.run(`CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            admin INTEGER DEFAULT 0, 
         )`);
 
+        //TODO: location table    
+        //TODO: populate LOCATION
         await dbService.run(`CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             date TEXT NOT NULL,
+            location_id INTEGER DEFAULT 0,
             closed INTEGER DEFAULT 0,            
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
-
+                
+        //TODO: disentangle exercises from session; stand-alone table of exercises from which users can pick 
         await dbService.run(`CREATE TABLE IF NOT EXISTS exercises (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
@@ -109,6 +115,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false) {
                 }
             }
         }
+        // TOPO: import list of exercises from file
 
     } catch (err) {
         console.error('Database initialization failed:', err);
