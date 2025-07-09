@@ -98,13 +98,22 @@ const setForm = document.getElementById('setForm');
 if (setForm) {
   setForm.addEventListener('submit', async e => {
     e.preventDefault();
-    const exercise_name = document.getElementById('setExerciseName').value;
+    const exerciseInput = document.getElementById('setExerciseName');
+    const selectedExercise = allExercises.find(ex => ex.name === exerciseInput.value);
+    if (!selectedExercise) {
+      alert('Please select a valid exercise from the list');
+      return;
+    }
     const reps = document.getElementById('setReps').value;
     const weight = document.getElementById('setWeight').value;
     await fetch(`/api/sessions/${sessionId}/sets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ exercise_name, reps, weight })
+      body: JSON.stringify({ 
+        exercise_id: selectedExercise.id, 
+        reps, 
+        weight 
+      })
     });
     loadSession();
   });

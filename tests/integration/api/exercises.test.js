@@ -100,9 +100,9 @@ describe('Exercise Management API', () => {
       .send({ name: uniqueName });
     const exerciseId = exRes.body.id;
     await testRequest
-      .post(`/api/sets`)
+      .post(`/api/sessions/${testSessionId}/sets`)
       .set('Cookie', sessionCookie)
-      .send({ exercise_id: exerciseId, session_id: testSessionId, reps: 5, weight: 100 });
+      .send({ exercise_id: exerciseId, reps: 5, weight: 100 });
     const delRes = await testRequest
       .delete(`/api/exercises/${exerciseId}`)
       .set('Cookie', sessionCookie);
@@ -118,11 +118,11 @@ describe('Exercise Management API', () => {
       .send({ name: uniqueName });
     const exerciseId = exRes.body.id;
     const setRes = await testRequest
-      .post(`/api/sets`)
+      .post(`/api/sessions/${testSessionId}/sets`)
       .set('Cookie', sessionCookie)
-      .send({ exercise_id: exerciseId, session_id: testSessionId, reps: 10, weight: null });
-    expect(setRes.statusCode).toBe(201);
-    expect(setRes.body.exercise_id).toBe(exerciseId);
-    expect(setRes.body.session_id).toBe(testSessionId);
+      .send({ exercise_id: exerciseId, reps: 10, weight: null });
+    expect(setRes.statusCode).toBe(201);    
+    expect(Number(setRes.body.exercise_id)).toBe(exerciseId);
+    expect(Number(setRes.body.session_id)).toBe(testSessionId);
   });
 });

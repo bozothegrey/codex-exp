@@ -130,7 +130,7 @@ describe('Session Management API', () => {
         .post(`/api/sessions/${sessionId}/sets`)
         .set('Cookie', sessionCookie)
         .send({
-          exercise_name: uniqueName,
+          exercise_id: exerciseId,
           reps: 10,
           weight: 135
         });

@@ -64,7 +64,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             activity_id INTEGER,
-            type TEXT NOT NULL,
+            type TEXT NOT NULL,            
             data TEXT NOT NULL,
             is_read BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -75,8 +75,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
         await dbService.run(`CREATE TABLE IF NOT EXISTS certifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             activity_id INTEGER NOT NULL,
-            certifier_id INTEGER NOT NULL,
-            activity_type TEXT NOT NULL,
+            certifier_id INTEGER NOT NULL,            
             certified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(activity_id, certifier_id),
             FOREIGN KEY (activity_id) REFERENCES sets(id) ON DELETE CASCADE,
