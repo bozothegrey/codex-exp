@@ -232,3 +232,16 @@ th, td {
   justify-content: space-between;
   gap: 4px;
 }
+
+.session-action {
+  color: #0000EE;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-right: 8px;
+}
+.session-action:hover {
+  color: #551A8B;
+}
+.terminate-action {
+  color: #b00;
+}

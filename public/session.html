@@ -9,12 +9,19 @@
 <body>
   <div class="container">
     <h1 id="sessionTitle">Session</h1>
-    <div id="exerciseList"></div>
-    <form id="exerciseForm">
-      <input type="text" id="exerciseName" placeholder="Exercise name" required>
-      <button type="submit">Add Exercise</button>
+    <div id="setList"></div>
+    <form id="setForm">
+      <input type="text" id="setExerciseName" placeholder="Exercise name" required autocomplete="off" list="exerciseSuggestions">
+      <datalist id="exerciseSuggestions"></datalist>
+      <input type="number" id="setReps" placeholder="Reps" required>
+      <input type="number" id="setWeight" placeholder="Weight (kg)" required>
+      <button type="submit">Add Set</button>
     </form>
-    <button id="closeButton">Close Session</button>
+    <div class="session-actions">
+      <a href="index.html" class="session-action">Back to Home</a>
+      <span class="session-action terminate-action" id="terminateSession">Terminate Session</span>
+      <span class="session-action delete-action" id="deleteSession" style="color:red; display:none">Delete Session</span>
+    </div>
   </div>
   <script src="session.js"></script>
 </body>

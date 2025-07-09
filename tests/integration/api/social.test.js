@@ -1,5 +1,6 @@
 const request = require('supertest');
 const { createTestApp, loginTestUser, testDb } = require('../../testHelpers');
+const { v4: uuidv4 } = require('uuid');
 
 let app, server, address;
 let testRequest;
@@ -14,6 +15,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
+  await testDb.run('DELETE FROM exercises');
   await testDb.close();
 });
 
@@ -22,7 +24,6 @@ describe('Social Features API', () => {
 
   beforeEach(async () => {
     // Create unique test user via API
-    const { v4: uuidv4 } = require('uuid');
     userA = { username: `userA_${uuidv4()}`, password: 'passA' };    
     userB = { username: `userB_${uuidv4()}`, password: 'passB' };
     
@@ -56,9 +57,7 @@ describe('Social Features API', () => {
     // User A follows User B
     await testRequest.post(`/api/follow/${userBId}`).set('Cookie', cookieA[0]);    
     // Verify follow relationship
-    
     const followingRes = await testRequest.get('/api/following').set('Cookie', cookieA[0]);
-    console.log('User A following:', JSON.stringify(followingRes.body, null, 2));
     expect(followingRes.body.some(u => u.id === userBId)).toBe(true);
     // User B creates a session and exercise
     const sessionRes = await testRequest
@@ -66,19 +65,19 @@ describe('Social Features API', () => {
         .set(`Cookie`, cookieB[0])
         .send({ date: '2025-06-19' });
     sessionId = sessionRes.body.id;
+    const uniqueExerciseName = 'Push Ups ' + uuidv4();
     const exerciseRes = await testRequest
-        .post(`/api/sessions/${sessionId}/exercises`)
+        .post(`/api/exercises`)
         .set(`Cookie`, cookieB[0])
-        .send({ sessionId, name: 'Push Ups' });
+        .send({ name: uniqueExerciseName });
     const exerciseId = exerciseRes.body.id;
-    // User B logs a set
+    // User B logs a set using correct endpoint
     await testRequest
-        .post(`/api/exercises/${exerciseId}/sets`)
+        .post(`/api/sessions/${sessionId}/sets`)
         .set('Cookie', cookieB[0])
-        .send({ reps: 10, weight: 50 });
+        .send({ exercise_name: uniqueExerciseName, reps: 10, weight: 50 });
     // User A checks notifications
     const notifResA = await testRequest.get('/api/notifications').set('Cookie', cookieA[0]);
-    console.log('User A notifications:', JSON.stringify(notifResA.body, null, 2));        
     expect(notifResA.status).toBe(200);
     expect(Array.isArray(notifResA.body)).toBe(true);
     expect(notifResA.body.some(n => n.type === 'set_logged')).toBe(true);
@@ -103,16 +102,17 @@ describe('Social Features API', () => {
       .set('Cookie', cookieB[0])
       .send({ date: '2025-06-20' });
     const sessionIdB = sessionRes.body.id;
+    const uniqueExerciseName = 'Squats ' + uuidv4();
     const exerciseRes = await testRequest
-      .post(`/api/sessions/${sessionIdB}/exercises`)
+      .post(`/api/exercises`)
       .set('Cookie', cookieB[0])
-      .send({ name: 'Squats' });
+      .send({ name: uniqueExerciseName });
     const exerciseIdB = exerciseRes.body.id;
-    // User B logs a set
+    // User B logs a set using correct endpoint
     const setRes = await testRequest
-      .post(`/api/exercises/${exerciseIdB}/sets`)
+      .post(`/api/sessions/${sessionIdB}/sets`)
       .set('Cookie', cookieB[0])
-      .send({ reps: 8, weight: 100 });
+      .send({ exercise_name: uniqueExerciseName, reps: 8, weight: 100 });
     const setId = setRes.body.id;
     // User A certifies User B's set
     const certRes = await testRequest
@@ -131,4 +131,88 @@ describe('Social Features API', () => {
   });
 
   // Additional tests for extensibility and error cases can be added here
+
+  describe('Challenge Features', () => {
+    let sessionIdB, exerciseIdB, setId;
+
+    beforeEach(async () => {
+      // User B creates a session and exercise
+      const sessionRes = await testRequest
+        .post(`/api/sessions`)
+        .set('Cookie', cookieB[0])
+        .send({ date: '2025-06-20' });
+      sessionIdB = sessionRes.body.id;
+      const uniqueExerciseName = 'Deadlifts ' + uuidv4();
+      const exerciseRes = await testRequest
+        .post(`/api/exercises`)
+        .set('Cookie', cookieB[0])
+        .send({ name: uniqueExerciseName });
+      exerciseIdB = exerciseRes.body.id;
+      // User B logs a set
+      const setRes = await testRequest
+        .post(`/api/sessions/${sessionIdB}/sets`)
+        .set('Cookie', cookieB[0])
+        .send({ exercise_name: uniqueExerciseName, reps: 5, weight: 150 });
+      setId = setRes.body.id;
+    });
+
+    test('User A can challenge User B\'s activity', async () => {
+      const challengeRes = await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieA[0])
+        .send({ challenged_activity_id: setId });
+      expect(challengeRes.status).toBe(200);
+      expect(challengeRes.body.success).toBe(true);
+    });
+
+    test('Cannot challenge own activity', async () => {
+      const challengeRes = await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieB[0])
+        .send({ challenged_activity_id: setId });
+      expect(challengeRes.status).toBe(400);
+      expect(challengeRes.body.error).toMatch(/cannot challenge your own activity/i);
+    });
+
+    test('Cannot challenge without activity_id', async () => {
+      const challengeRes = await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieA[0])
+        .send({});
+      expect(challengeRes.status).toBe(400);
+      expect(challengeRes.body.error).toMatch(/missing activity_id/i);
+    });
+
+    test('Cannot challenge already certified activity', async () => {
+      // First certify the activity
+      await testRequest
+        .post('/api/certifications')
+        .set('Cookie', cookieA[0])
+        .send({ activity_id: setId });
+
+      // Then try to challenge it
+      const challengeRes = await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieA[0])
+        .send({ challenged_activity_id: setId });
+      expect(challengeRes.status).toBe(400);
+      expect(challengeRes.body.error).toMatch(/already certified/i);
+    });
+
+    test('Cannot challenge already challenged activity', async () => {
+      // First challenge the activity
+      await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieA[0])
+        .send({ challenged_activity_id: setId });
+
+      // Try to challenge again
+      const challengeRes = await testRequest
+        .post('/api/challenges')
+        .set('Cookie', cookieA[0])
+        .send({ challenged_activity_id: setId });
+      expect(challengeRes.status).toBe(400);
+      expect(challengeRes.body.error).toMatch(/already challenged/i);
+    });
+  });
 });

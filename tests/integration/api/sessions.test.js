@@ -104,4 +104,58 @@ describe('Session Management API', () => {
       expect(response.body.id).toBe(sessionId);
     });
   });
+
+  describe('Full session lifecycle', () => {
+    it('should create session, add exercise, log set via new endpoint, retrieve sets, and close session', async () => {
+      // 1. Create session
+      const sessionRes = await testRequest
+        .post('/api/sessions')
+        .set('Cookie', sessionCookie)
+        .send({ date: '2025-06-08' });
+      const sessionId = sessionRes.body.id;
+      expect(sessionRes.statusCode).toBe(200);
+
+      // 2. Create exercise
+      const { v4: uuidv4 } = require('uuid');
+      const uniqueName = 'Bench Press ' + uuidv4();
+      const exerciseRes = await testRequest
+        .post('/api/exercises')
+        .set('Cookie', sessionCookie)
+        .send({ name: uniqueName });
+      const exerciseId = exerciseRes.body.id;
+      expect(exerciseRes.statusCode).toBe(201);
+
+      // 3. Log set using new endpoint
+      const setRes = await testRequest
+        .post(`/api/sessions/${sessionId}/sets`)
+        .set('Cookie', sessionCookie)
+        .send({
+          exercise_name: uniqueName,
+          reps: 10,
+          weight: 135
+        });
+      expect(setRes.statusCode).toBe(201);
+
+      // 4. Retrieve sets
+      const getSessionRes = await testRequest
+        .get(`/api/sessions/${sessionId}`)
+        .set('Cookie', sessionCookie);
+      expect(getSessionRes.statusCode).toBe(200);
+      expect(getSessionRes.body.sets).toHaveLength(1);
+      expect(getSessionRes.body.sets[0].reps).toBe(10);
+      expect(getSessionRes.body.sets[0].weight).toBe(135);
+
+      // 5. Close session
+      const closeRes = await testRequest
+        .post(`/api/sessions/${sessionId}/close`)
+        .set('Cookie', sessionCookie);
+      expect(closeRes.statusCode).toBe(200);
+
+      // Verify session is closed
+      const verifyRes = await testRequest
+        .get(`/api/sessions/${sessionId}`)
+        .set('Cookie', sessionCookie);
+      expect(verifyRes.body.closed).toBe(1);
+    });
+  });
 });

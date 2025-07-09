@@ -1,6 +1,7 @@
 const request = require('supertest');
 const createApp = require('../server');
 const DatabaseService = require('../db/dbService');
+const { initializeDatabase } = require('../db/init');
 
 // Shared persistent in-memory database instance for all tests
 const testDb = new DatabaseService('test');
@@ -9,8 +10,8 @@ let app;
 let server;
 
 async function createTestApp() {
-  // Ensure the database is initialized only once
-  await testDb.getConnection(); // Triggers schema initialization if not already done
+  // Initialize the database for tests (no default users/exercises)
+  await initializeDatabase(testDb, false, false);
 
   // Create test app instance, passing the shared database service
   app = createApp({

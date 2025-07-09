@@ -13,8 +13,10 @@ async function fetchSessions() {
     const viewUrl = `session.html?id=${row.id}&readonly=1`;
     const editUrl = `session.html?id=${row.id}`;
     const actions = row.closed ?
-      `<a href="${viewUrl}">View</a>` :
-      `<a href="${editUrl}">Resume</a> | <a href="${viewUrl}">View</a>`;
+      `<a href="${viewUrl}" class="session-action">View</a> | 
+       <span class="session-action delete-action" data-id="${row.id}" style="color:red">Delete</span>` :
+      `<a href="${editUrl}" class="session-action">Resume</a> | 
+       <span class="session-action terminate-action" data-id="${row.id}">Terminate</span>`;
     tr.innerHTML = `<td>${row.date}</td><td>${row.closed ? 'Closed' : 'Open'}</td><td>${actions}</td>`;
     tbody.appendChild(tr);
   });
@@ -134,14 +136,19 @@ function addFollowedUserToList(user) {
 
 async function handleCertify(activityId, li) {
   try {
+    console.log('Certifying activity:', activityId);
     const res = await fetch('/api/certifications', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify({ activity_id: activityId })
     });
     if (res.ok) {
       li.querySelector('.certify-btn').classList.add('done');
       li.querySelector('.certify-btn').title = 'Certified!';
+      console.log('Successfully certified activity:', activityId);
     } else {
       const err = await res.json();
       alert(err.error || 'Could not certify.');
@@ -153,20 +160,47 @@ async function handleCertify(activityId, li) {
 
 async function handleChallenge(activityId, li) {
   try {
+    console.log('Challenging activity:', activityId);
     const res = await fetch('/api/challenges', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ challenged_activity_id: activityId })
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ 
+        challenged_activity_id: activityId
+      })
     });
+    
     if (res.ok) {
       li.querySelector('.challenge-btn').classList.add('done');
       li.querySelector('.challenge-btn').title = 'Challenged!';
-    } else {
-      const err = await res.json();
-      alert(err.error || 'Could not challenge.');
+      return;
     }
+
+    // Enhanced error handling
+    const err = await res.json();
+    console.error('Challenge error:', {
+      status: res.status,
+      error: err,
+      activityId
+    });
+
+    let errorMsg = 'Could not challenge. ';
+    if (res.status === 400) {
+      errorMsg += err.error || 'Invalid request';
+    } else if (res.status === 401) {
+      errorMsg += 'Please login again';
+    } else if (res.status === 404) {
+      errorMsg += 'Activity not found';
+    } else {
+      errorMsg += 'Server error';
+    }
+
+    alert(errorMsg);
   } catch (e) {
-    alert('Error challenging activity.');
+    console.error('Challenge exception:', e);
+    alert(`Error: ${e.message || 'Failed to challenge activity'}`);
   }
 }
 
@@ -175,17 +209,22 @@ async function fetchNotifications() {
   ul.innerHTML = '';
   try {
     const res = await fetch('/api/notifications');
-    console.log('Notifications API response:', res.status, res.ok);
     if (res.ok) {
       const notifications = await res.json();
-      console.log('Received notifications:', notifications);
       notifications.forEach(n => {
         const li = document.createElement('li');
+        li.dataset.notification = JSON.stringify({
+          id: n.id,
+          type: n.type,
+          user_id: n.user_id,
+          username: n.username,
+          data: n.data
+        });
         let msg = '';
         let activityId = null;
         if (n.type === 'set_logged') {
           const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-          msg = data.message || `${data.username || 'A user you follow'} logged a new set.`;
+          msg = `${data.username || 'A user you follow'} performed ${data.reps} reps of ${data.exercise_name || 'an exercise'} at ${data.weight || 'body'} weight`;
           activityId = data.setId || data.set_id || data.activity_id;
         } else {
           msg = n.message || n.type;
@@ -200,11 +239,11 @@ async function fetchNotifications() {
           certifyBtn.onclick = (e) => { e.stopPropagation(); handleCertify(activityId, li); };
           li.appendChild(certifyBtn);
 
-          // Add challenge (dumbbell) icon
+          // Add challenge (question mark) icon
           const challengeBtn = document.createElement('button');
           challengeBtn.className = 'challenge-btn icon-btn';
           challengeBtn.title = 'Challenge this activity';
-          challengeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="7" width="12" height="2" rx="1" fill="#ff6600"/><rect x="1" y="5" width="2" height="6" rx="1" fill="#888"/><rect x="13" y="5" width="2" height="6" rx="1" fill="#888"/></svg>';
+          challengeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 14A6 6 0 108 2a6 6 0 000 12z" fill="#fff" stroke="#ff0000" stroke-width="1"/><path d="M8 12a1 1 0 100-2 1 1 0 000 2zM8 9V7a2 2 0 012-2" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round"/></svg>';
           challengeBtn.onclick = (e) => { e.stopPropagation(); handleChallenge(activityId, li); };
           li.appendChild(challengeBtn);
         }
@@ -312,10 +351,37 @@ function setupChallengeFilters() {
   }, 10000); // every 10s
 }
 
+function setupTerminateButtons() {
+  document.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('terminate-action')) {
+      const sessionId = e.target.dataset.id;
+      if (confirm('Are you sure you want to terminate this session?')) {
+        await fetch(`/api/sessions/${sessionId}/close`, { 
+          method: 'POST' 
+        });
+        fetchSessions(); // Refresh the list
+      }
+    } else if (e.target.classList.contains('delete-action')) {
+      const sessionId = e.target.dataset.id;
+      if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
+        const res = await fetch(`/api/sessions/${sessionId}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          fetchSessions(); // Refresh the list
+        } else {
+          alert('Failed to delete session');
+        }
+      }
+    }
+  });
+}
+
 window.onload = async () => {
   await updateAuthLinks();
   fetchSessions();
   fetchFollowedUsers();
   startNotificationsPolling();
   setupChallengeFilters();
+  setupTerminateButtons();
 };

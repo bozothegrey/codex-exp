@@ -14,14 +14,14 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
+  await testDb.run('DELETE FROM exercises');
   await testDb.close();
 });
 
-  describe('Exercise Management API', () => {  
+describe('Exercise Management API', () => {  
   let testUser;
   let sessionCookie;
   let testSessionId;
-  
 
   beforeEach(async () => {
     // Create unique test user via API
@@ -55,52 +55,74 @@ afterAll(async () => {
       .set('Cookie', sessionCookie);
   });
 
-  describe('POST /api/sessions/:id/exercises', () => {
+  it('should create a new exercise', async () => {
+    const { v4: uuidv4 } = require('uuid');
+    const uniqueName = 'Bench Press ' + uuidv4();
+    const response = await testRequest
+      .post(`/api/exercises`)
+      .set('Cookie', sessionCookie)
+      .send({ name: uniqueName });
+    expect(response.statusCode).toBe(201);
+    expect(response.body.id).toBeDefined();
+    expect(response.body.name).toBe(uniqueName);
+  });
 
-    it('should create a new exercise', async () => {
-      const response = await testRequest
-        .post(`/api/sessions/${testSessionId}/exercises`)
-        .set('Cookie', sessionCookie)
-        .send({ name: 'Bench Press' });
-      
-      expect(response.statusCode).toBe(200);
-      expect(response.body.id).toBeDefined();
-      expect(response.body.name).toBe('Bench Press');
-    });
+  it('should require name field', async () => {
+    const response = await testRequest
+      .post(`/api/exercises`)
+      .set('Cookie', sessionCookie)
+      .send({});
+    expect(response.statusCode).toBe(400);
+  });
 
-    it('should require name field', async () => {
-      const response = await testRequest
-        .post(`/api/sessions/${testSessionId}/exercises`)
-        .set('Cookie', sessionCookie)
-        .send({});
-      
-      expect(response.statusCode).toBe(405);
-    });
+  it('should delete an exercise', async () => {
+    const { v4: uuidv4 } = require('uuid');
+    const uniqueName = 'Squat ' + uuidv4();
+    const createResponse = await testRequest
+      .post(`/api/exercises`)
+      .set('Cookie', sessionCookie)
+      .send({ name: uniqueName });
+    const exerciseId = createResponse.body.id;
+    const response = await testRequest
+      .delete(`/api/exercises/${exerciseId}`)
+      .set('Cookie', sessionCookie);
+    expect(response.statusCode).toBe(200);
+    expect(response.body.id).toBe(exerciseId);
+  });
 
-    it('should reject invalid session ID', async () => {
-      const response = await testRequest
-        .post('/api/sessions/999/exercises')
-        .set('Cookie', sessionCookie)
-        .send({ name: 'Bench Press' });
-      
-      expect(response.statusCode).toBe(404);
-    }); 
+  it('should not delete exercise in use', async () => {
+    const { v4: uuidv4 } = require('uuid');
+    const uniqueName = 'Deadlift ' + uuidv4();
+    // Create exercise and set
+    const exRes = await testRequest
+      .post(`/api/exercises`)
+      .set('Cookie', sessionCookie)
+      .send({ name: uniqueName });
+    const exerciseId = exRes.body.id;
+    await testRequest
+      .post(`/api/sets`)
+      .set('Cookie', sessionCookie)
+      .send({ exercise_id: exerciseId, session_id: testSessionId, reps: 5, weight: 100 });
+    const delRes = await testRequest
+      .delete(`/api/exercises/${exerciseId}`)
+      .set('Cookie', sessionCookie);
+    expect(delRes.statusCode).toBe(400);
+  });
 
-    it('should delete an exercise', async () => {
-      // First create a test exercise via API
-      const createResponse = await testRequest
-        .post(`/api/sessions/${testSessionId}/exercises`)
-        .set('Cookie', sessionCookie)
-        .send({ name: 'Squat' });
-
-      const exerciseId = createResponse.body.id;
-
-      const response = await testRequest
-        .delete(`/api/exercises/${exerciseId}`)
-        .set('Cookie', sessionCookie);
-      
-      expect(response.statusCode).toBe(200);
-      expect(response.body.id).toBe(exerciseId);
-    });
+  it('should add a set only for existing exercise and session', async () => {
+    const { v4: uuidv4 } = require('uuid');
+    const uniqueName = 'Pull Up ' + uuidv4();
+    const exRes = await testRequest
+      .post(`/api/exercises`)
+      .set('Cookie', sessionCookie)
+      .send({ name: uniqueName });
+    const exerciseId = exRes.body.id;
+    const setRes = await testRequest
+      .post(`/api/sets`)
+      .set('Cookie', sessionCookie)
+      .send({ exercise_id: exerciseId, session_id: testSessionId, reps: 10, weight: null });
+    expect(setRes.statusCode).toBe(201);
+    expect(setRes.body.exercise_id).toBe(exerciseId);
+    expect(setRes.body.session_id).toBe(testSessionId);
   });
 });

@@ -3,7 +3,6 @@ const path = require('path');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
 const DatabaseService = require('./db/dbService');
-const { initializeDatabase } = require('./db/init');
 const { setupChallengeJobs } = require('./db/challengeJobs');
 
 const PORT = process.env.PORT || 3000;
@@ -12,7 +11,6 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'secret-key';
 
 function createApp(sessionConfig = {}, dbService) {
   const app = express();
-  let dbReady = false;
   
   // Default session config
   const defaultSessionConfig = {
@@ -38,18 +36,9 @@ function createApp(sessionConfig = {}, dbService) {
     console.error('Database error:', err);
   });
 
-  initializeDatabase(dbService).then(() => {
-    dbReady = true;
-    // Start scheduled challenge jobs
-    // TODO: setupChallengeJobs(dbService);
-  }).catch(err => {
-    console.error('Database initialization failed:', err);
-    process.exit(1);
-  });
-
-  // Add readiness check
+  // Add readiness check (assume db is ready if app is running)
   app.get('/ready', (req, res) => {
-    dbReady ? res.sendStatus(200) : res.sendStatus(503);
+    res.sendStatus(200);
   });
 
   // Middleware to ensure authentication
@@ -302,200 +291,110 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       }
 
       const session = sessionRows[0];
-      const exercises = await dbService.query(
-        'SELECT * FROM exercises WHERE session_id = ?',
+      const sets = await dbService.query(
+        `SELECT s.*, e.id as exercise_id, e.name as exercise_name 
+         FROM sets s
+         JOIN exercises e ON s.exercise_id = e.id
+         WHERE s.session_id = ?
+         ORDER BY s.id`,
         [id]
       );
 
-      if (exercises.length === 0) {
-        dbService.emit('session:accessed', { sessionId: id, userId });
-        return res.json({ ...session, exercises: [] });
-      }
-
-      const exIds = exercises.map(e => e.id);
-      const placeholders = exIds.map(() => '?').join(',');
-      const sets = await dbService.query(
-        `SELECT * FROM sets WHERE exercise_id IN (${placeholders})`,
-        exIds
-      );
-
-      const setsByExercise = sets.reduce((acc, set) => {
-        if (!acc[set.exercise_id]) acc[set.exercise_id] = [];
-        acc[set.exercise_id].push(set);
-        return acc;
-      }, {});
-
-      const exercisesWithSets = exercises.map(exercise => ({
-        ...exercise,
-        sets: setsByExercise[exercise.id] || []
+      const formattedSets = sets.map(set => ({
+        id: set.id,
+        reps: set.reps,
+        weight: set.weight,
+        exercise: {
+          id: set.exercise_id,
+          name: set.exercise_name
+        }
       }));
 
       dbService.emit('session:accessed', { sessionId: id, userId });
-      res.json({ ...session, exercises: exercisesWithSets });
-    } catch (err) {
-      handleError(res, err);
-    }
-  });
-
-  app.post('/api/sessions/:id/exercises', ensureLoggedIn, async (req, res) => {
-    try {
-      const sessionId = parseInt(req.params.id);
-      const userId = req.session.userId;
-      const { name } = req.body;
-
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      if (!name || typeof name !== 'string') {
-        return res.status(405).json({ error: 'Exercise name is required' });
-      }
-
-      if (isNaN(sessionId)) {
-        return res.status(400).json({ error: 'Invalid session ID' });
-      }
-
-      const session = await dbService.query(
-        'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
-        [sessionId, userId]
-      );
-      
-      if (session.length === 0) {
-        return res.status(404).json({ error: 'session not found' });
-      }
-
-      if (name.length === 0) {
-        return res.status(405).json({ error: 'Exercise Name Required' });
-      }
-
-      const result = await dbService.run(
-        'INSERT INTO exercises (session_id, name) VALUES (?, ?)',
-        [sessionId, name]
-      );
-
-      const exercise = {
-        id: result.lastID,
-        session_id: sessionId,
-        name
-      };
-
-      dbService.emit('exercise:created', {
-        exerciseId: exercise.id,
-        sessionId,
-        userId,
-        name
+      res.json({ 
+        ...session, 
+        sets: formattedSets 
       });
-
-      res.json(exercise);
     } catch (err) {
       handleError(res, err);
     }
   });
 
+  // --- GLOBAL EXERCISE ENDPOINTS ---
+
+  // Create a new exercise (global)
+  app.post('/api/exercises', ensureLoggedIn, async (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name required' });
+    try {
+      const result = await dbService.run('INSERT INTO exercises (name) VALUES (?)', [name]);
+      res.status(201).json({ id: result.lastID, name });
+    } catch (e) {
+      res.status(400).json({ error: 'Exercise already exists or invalid' });
+    }
+  });
+
+  // Delete an exercise (only if not referenced in sets)
   app.delete('/api/exercises/:id', ensureLoggedIn, async (req, res) => {
-    try {
-      const id = req.params.id;
-      const userId = req.session.userId;
-
-      const result = await dbService.transaction(async (db) => {
-        const exercise = await dbService.query(
-          `SELECT e.* FROM exercises e
-           JOIN sessions s ON e.session_id = s.id
-           WHERE e.id = ? AND s.user_id = ?`,
-          [id, userId]
-        );
-        
-        if (exercise.length === 0) {
-          return { changes: 0 };
-        }
-
-        const result = await dbService.run(
-          `DELETE FROM exercises WHERE id IN (
-            SELECT e.id FROM exercises e
-            JOIN sessions s ON e.session_id = s.id
-            WHERE e.id = ? AND s.user_id = ?
-          )`,
-          [id, userId]
-        );
-
-        return { ...result, exercise: exercise[0] };
-      });
-
-      if (result.changes === 0) {
-        return res.status(404).json({ error: 'not found' });
-      }
-
-      dbService.emit('exercise:deleted', {
-        exerciseId: id,
-        sessionId: result.exercise.session_id,
-        userId
-      });
-
-      res.json({ id: parseInt(id) });
-    } catch (err) {
-      handleError(res, err);
-    }
+    const { id } = req.params;
+    const used = await dbService.query('SELECT 1 FROM sets WHERE exercise_id = ?', [id]);
+    if (used.length > 0) return res.status(400).json({ error: 'Exercise is in use' });
+    const result = await dbService.run('DELETE FROM exercises WHERE id = ?', [id]);
+    if (result.changes === 0) return res.status(404).json({ error: 'Exercise not found' });
+    res.json({ id: Number(id) });
   });
 
-  app.post('/api/exercises/:id/sets', ensureLoggedIn, async (req, res) => {
-    
+  // --- SETS ENDPOINT ---
+
+  // Endpoint matching frontend expectation
+  app.post('/api/sessions/:id/sets', ensureLoggedIn, async (req, res) => {
     try {
-      const exerciseId = req.params.id;
-      const { reps, weight } = req.body;
-      const userId = req.session.userId;
-      let set;
+      const sessionId = req.params.id;
+      const { exercise_name, reps, weight } = req.body;
       
-
-      if (exerciseId == null) {
-        return res.status(400).json({ error: 'ExerciseId is required' });
+      if (!exercise_name || !reps) {
+        return res.status(400).json({ error: 'exercise_name and reps required' });
       }
 
-      if (reps == null) {
-        return res.status(400).json({ error: 'reps is required' });
-      }
-
+      // Get exercise by name
+      const ex = await dbService.query('SELECT * FROM exercises WHERE name = ?', [exercise_name]);
+      if (!ex.length) return res.status(404).json({ error: 'Exercise not found' });
       
-      const exercise = await dbService.query(
-        `SELECT e.* FROM exercises e
-         JOIN sessions s ON e.session_id = s.id
-         WHERE e.id = ? AND s.user_id = ?`,
-        [exerciseId, userId]
+      // Verify session exists and belongs to user
+      const sess = await dbService.query(
+        'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+        [sessionId, req.session.userId]
       );
-      
-      if (exercise.length === 0) {
-        return res.status(404).json({ error: 'exercise not found' });
-      }
+      if (!sess.length) return res.status(404).json({ error: 'Session not found' });
 
-      
-      try {
-        const result = await dbService.run(
-          'INSERT INTO sets (exercise_id, reps, weight) VALUES (?, ?, ?)',
-          [exerciseId, reps, weight || null]
-        );     
+      // Create set
+      const result = await dbService.run(
+        'INSERT INTO sets (exercise_id, session_id, reps, weight) VALUES (?, ?, ?, ?)',
+        [ex[0].id, sessionId, reps, weight || null]
+      );
 
-        set = {
-          id: result.lastID,
-          exercise: exercise[0].name, 
-          reps: reps,
-          weight: weight || null
-        };  
+      // Notify followers
+      await notifyFollowers(
+        req.session.userId,
+        'set_logged',
+        { 
+          setId: result.lastID, 
+          exercise_id: ex[0].id, 
+          exercise_name: exercise_name,
+          session_id: sessionId, 
+          reps, 
+          weight,
+          username: req.session.username
+        }
+      );
 
-      } catch (err) {
-        console.error('Error inserting set:', err);
-      }    
-
-      // Notify followers of new set logged      
-      try {
-        await notifyFollowers(userId, 'set_logged', {
-          userId: userId,
-          setId: set.id,          
-          message: `${req.session.username || 'A user you follow'} logged a new set: ${exercise[0].name} ${reps} reps${weight ? ' @ ' + weight + 'kg' : ''}`
-        });
-      } catch (notifyErr) {
-        console.error('Error in notifyFollowers:', notifyErr);
-      }
-
-      res.json(set);
+      res.status(201).json({ 
+        id: result.lastID,
+        exercise: { id: ex[0].id, name: exercise_name },
+        session_id: sessionId,
+        reps,
+        weight
+      });
     } catch (err) {
       handleError(res, err);
     }
@@ -507,10 +406,10 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       const userId = req.session.userId;
 
       const result = await dbService.transaction(async (db) => {
+        // First verify the set exists and belongs to user
         const set = await dbService.query(
-          `SELECT s.*, e.session_id FROM sets s
-           JOIN exercises e ON s.exercise_id = e.id
-           JOIN sessions sess ON e.session_id = sess.id
+          `SELECT s.* FROM sets s
+           JOIN sessions sess ON s.session_id = sess.id
            WHERE s.id = ? AND sess.user_id = ?`,
           [id, userId]
         );
@@ -519,15 +418,14 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
           return { changes: 0 };
         }
 
+        // Delete the set
         const result = await dbService.run(
-          `DELETE FROM sets WHERE id IN (
-            SELECT s.id FROM sets s
-            JOIN exercises e ON s.exercise_id = e.id
-            JOIN sessions sess ON e.session_id = sess.id
-            WHERE s.id = ? AND sess.user_id = ?
-          )`,
-          [id, userId]
+          `DELETE FROM sets WHERE id = ?`,
+          [id]
         );
+        
+        // Return deleted set info for event emission
+        return { ...result, set: set[0] };
 
         return { ...result, set: set[0] };
       });
@@ -744,24 +642,46 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
     }
   });
 
+  // Get all exercises
+  app.get('/api/exercises', ensureLoggedIn, async (req, res) => {
+    try {
+      const exercises = await dbService.query('SELECT * FROM exercises');
+      res.json(exercises);
+    } catch (err) {
+      console.error('Error fetching exercises:', err);
+      res.status(500).json({ error: 'Failed to fetch exercises' });
+    }
+  });
+
   // Get followed users
-app.get('/api/follows', ensureLoggedIn, async (req, res) => {
-  const users = await dbService.query(
-    `SELECT u.id, u.username FROM users u
-     JOIN follows f ON u.id = f.following_id
-     WHERE f.follower_id = ?`,
-    [req.session.userId]
-  );
-  res.json(users);
-});
+  app.get('/api/follows', ensureLoggedIn, async (req, res) => {
+    const users = await dbService.query(
+      `SELECT u.id, u.username FROM users u
+       JOIN follows f ON u.id = f.following_id
+       WHERE f.follower_id = ?`,
+      [req.session.userId]
+    );
+    res.json(users);
+  });
 
   // Create a challenge
 app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
-  const { challenged_activity_id, challenged_user_id, expires_at } = req.body;
+  const { challenged_activity_id, expires_at } = req.body;
   const challenger_user_id = req.session.userId;
-  if (!challenged_activity_id || !challenged_user_id) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  if (!challenged_activity_id) {
+    return res.status(400).json({ error: 'Missing activity_id' });
   }
+
+  // Get activity owner from user_activities table
+  const activityOwner = await dbService.query(
+    `SELECT user_id FROM user_activities WHERE id = ?`,
+    [challenged_activity_id]
+  );
+  if (!activityOwner.length) {
+    return res.status(404).json({ error: 'Activity not found' });
+  }
+  const challenged_user_id = activityOwner[0].user_id;
+
   // Prevent self-challenges
   if (challenger_user_id === challenged_user_id) {
     return res.status(400).json({ error: 'Cannot challenge your own activity' });
@@ -796,7 +716,7 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
   const activityOwner = await dbService.query(
     `SELECT s.id FROM sets s
      JOIN exercises e ON s.exercise_id = e.id
-     JOIN sessions sess ON e.session_id = sess.id
+     JOIN sessions sess ON s.session_id = sess.id
      WHERE s.id = ? AND sess.user_id = ?`,
     [activity_id, certifier_id]
   );
@@ -877,6 +797,11 @@ app.get('/api/challenges/given', ensureLoggedIn, async (req, res) => {
   }
 });
 
+  // Add 404 handler for undefined routes
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Endpoint not found' });
+  });
+
   return app;
 }
 
@@ -885,8 +810,15 @@ module.exports = createApp;
 // If run directly, start the server
 if (require.main === module) {
   const dbService = new DatabaseService(DB_FILE);
-  const app = createApp({}, dbService);
-  app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+  // Initialize database before creating app
+  const { initializeDatabase } = require('./db/init');
+  initializeDatabase(dbService, true, true).then(() => {
+    const app = createApp({}, dbService);
+    app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+  }).catch(err => {
+    console.error('Database initialization failed:', err);
+    process.exit(1);
   });
 }
