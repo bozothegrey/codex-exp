@@ -5,35 +5,30 @@ const path = require('path');
 async function initializeDatabase(dbService, insertDefaultUsers = false, insertDefaultExercises = false) {
     try {
         // Create all tables with IF NOT EXISTS to be idempotent
-        // TODO admin rights for exercises creation, location create etc
         await dbService.run(`CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             admin INTEGER DEFAULT 0
         )`);
 
-        //TODO: location table    
-        //TODO: populate LOCATION
         await dbService.run(`CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
-            start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            start_time TIMESTAMP NOT NULL DEFAULT NOW(),
             end_time TIMESTAMP,
             location_id INTEGER DEFAULT 0,
             closed INTEGER DEFAULT 0,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
                 
-        // New global exercises table
         await dbService.run(`CREATE TABLE IF NOT EXISTS exercises (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         )`);
 
-        // Sets table links to exercise_id and session_id
         await dbService.run(`CREATE TABLE IF NOT EXISTS sets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             session_id INTEGER NOT NULL,
             exercise_id INTEGER NOT NULL,
             reps INTEGER NOT NULL,
@@ -45,51 +40,50 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
         await dbService.run(`CREATE TABLE IF NOT EXISTS follows (
             follower_id INTEGER NOT NULL,
             following_id INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW(),
             PRIMARY KEY (follower_id, following_id),
             FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
-        // user_activities must be created before notifications due to FK
         await dbService.run(`CREATE TABLE IF NOT EXISTS user_activities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             type TEXT NOT NULL,
             data TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW(),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             activity_id INTEGER,
             type TEXT NOT NULL,            
             data TEXT NOT NULL,
-            is_read BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW(),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (activity_id) REFERENCES user_activities(id) ON DELETE SET NULL
         )`);
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS certifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             activity_id INTEGER NOT NULL,
             certifier_id INTEGER NOT NULL,            
-            certified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            certified_at TIMESTAMP DEFAULT NOW(),
             UNIQUE(activity_id, certifier_id),
             FOREIGN KEY (activity_id) REFERENCES user_activities(id) ON DELETE CASCADE,
             FOREIGN KEY (certifier_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS challenges (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             challenged_user_id INTEGER NOT NULL,
             challenger_user_id INTEGER NOT NULL,
             challenged_activity_id INTEGER NOT NULL,
             resolving_activity_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW(),
             status TEXT NOT NULL CHECK(status IN ('open', 'closed', 'expired')),
             expires_at TIMESTAMP,
             closed_at TIMESTAMP,
@@ -103,23 +97,27 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
         // Insert default users if requested and none exist
         if (insertDefaultUsers) {
             const defaultUsers = [
-                { username: 'emanuele', password: 'ghisa' },
+                { username: 'ema', password: 'ghisa' },
                 { username: 'SBP', password: 'ghisa' },
                 { username: 'dino', password: 'ghisa' }
             ];
-            const row = await dbService.query('SELECT COUNT(*) as count FROM users');
-            if (row[0].count === 0) {
-                for (const u of defaultUsers) {
-                    const hash = await bcrypt.hash(u.password, 10);                    
+            console.log('Inserting default users');
+            for (const u of defaultUsers) {
+                try {
+                    const hash = await bcrypt.hash(u.password, 10);
                     await dbService.run(
-                        'INSERT INTO users (username, password) VALUES (?, ?)', 
+                        'INSERT INTO users (username, password, admin) VALUES ($1, $2, 1) ON CONFLICT (username) DO NOTHING', 
                         [u.username, hash]
                     );
+                    console.log(`Inserted user: ${u.username}`);
+                } catch (e) {
+                    console.error('Error inserting user:', e);
                 }
             }
         }
-        // TODO: import list of exercises from file
+        //import list of exercises from file
         if (insertDefaultExercises) {
+            console.log('Inserting exercises');
             const exercisesPath = path.join(__dirname, 'exercises.json');
             if (fs.existsSync(exercisesPath)) {
             const exercisesData = fs.readFileSync(exercisesPath, 'utf-8');
@@ -133,7 +131,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
                 for (const ex of exercises) {
                 try {
                     await dbService.run(
-                    'INSERT OR IGNORE INTO exercises (name) VALUES (?)',
+                    'INSERT INTO exercises (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
                     [ex.name || ex]
                     );
                 } catch (e) {

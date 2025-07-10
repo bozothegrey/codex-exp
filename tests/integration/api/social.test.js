@@ -1,22 +1,19 @@
 const request = require('supertest');
-const { createTestApp, loginTestUser, testDb } = require('../../testHelpers');
+const { setupTestDatabase, resetTestDatabase, seedTestData } = require('../../testHelpers');
 const { v4: uuidv4 } = require('uuid');
 
-let app, server, address;
+let app;
 let testRequest;
 
 beforeAll(async () => {  
-  const result = await createTestApp();
-  app = result.app;
-  server = result.server;
-  address = result.address;
-  testRequest = request(address);
+  await setupTestDatabase();
+  const server = require('../../../server');
+  app = server.createApp();
+  testRequest = request(app);
 });
 
 afterAll(async () => {
-  await new Promise((resolve) => server.close(resolve));
-  await testDb.run('DELETE FROM exercises');
-  await testDb.close();
+  await resetTestDatabase();
 });
 
 describe('Social Features API', () => {  

@@ -10,5 +10,6 @@ module.exports = {
     '/node_modules/',
     '/tests/'
   ],
+  setupFiles: ['<rootDir>/jest.setup.js'],
   setupFilesAfterEnv: ['@testing-library/jest-dom'],  
 }

@@ -1,3 +1,7 @@
+require('dotenv').config();
+console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
+console.log(`Database: ${process.env.DATABASE_URL?.replace(/\/\/[^:]+:[^@]+@/, '//*****:*****@')}`);
+
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
@@ -59,7 +63,7 @@ app.post('/api/login', async (req, res) => {
   try {
     
     const { username, password } = req.body;
-    const rows = await dbService.query('SELECT * FROM users WHERE username = ?', [username]);    
+    const rows = await dbService.query('SELECT * FROM users WHERE username = $1', [username]);    
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
     
     const row = rows[0];
@@ -95,14 +99,14 @@ app.post('/api/register', async (req, res) => {
     }
     
     // Check if username already exists
-    const existingUser = await dbService.query('SELECT * FROM users WHERE username = ?', [username]);
+    const existingUser = await dbService.query('SELECT * FROM users WHERE username = $1', [username]);
     if (existingUser.length > 0) {
       return res.status(400).json({ error: 'Username already exists' });
     }
     
     // Hash password and create user
     const hash = await bcrypt.hash(password, 10);
-    await dbService.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hash]);
+    await dbService.run('INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id', [username, hash]);
     
     res.status(201).json({ success: true });
   } catch (err) {
@@ -126,7 +130,7 @@ app.put('/api/user/password', ensureLoggedIn, async (req, res) => {
     }
     
     // Get current user
-    const [user] = await dbService.query('SELECT * FROM users WHERE id = ?', [userId]);
+    const [user] = await dbService.query('SELECT * FROM users WHERE id = $1', [userId]);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -139,7 +143,7 @@ app.put('/api/user/password', ensureLoggedIn, async (req, res) => {
     
     // Update password
     const hash = await bcrypt.hash(newPassword, 10);
-    await dbService.run('UPDATE users SET password = ? WHERE id = ?', [hash, userId]);
+    await dbService.run('UPDATE users SET password = $1 WHERE id = $2', [hash, userId]);
     
     res.json({ success: true });
   } catch (err) {
@@ -154,10 +158,10 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   try {
     await dbService.transaction(async () => {
       // Delete user sessions (cascades to exercises and sets)
-      await dbService.run('DELETE FROM sessions WHERE user_id = ?', [userId]);
+      await dbService.run('DELETE FROM sessions WHERE user_id = $1', [userId]);
       
       // Delete user
-      await dbService.run('DELETE FROM users WHERE id = ?', [userId]);
+      await dbService.run('DELETE FROM users WHERE id = $1', [userId]);
     });
     
     // Destroy session after successful deletion
@@ -194,7 +198,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   app.get('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
       const sessions = await dbService.query(
-        'SELECT * FROM sessions WHERE user_id = ? ORDER BY start_time DESC',
+        'SELECT * FROM sessions WHERE user_id = $1 ORDER BY start_time DESC',
         [req.session.userId]
       );
       res.json(sessions);
@@ -206,10 +210,10 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   app.post('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
       const { lastID } = await dbService.run(
-        'INSERT INTO sessions (user_id) VALUES (?)',
+        'INSERT INTO sessions (user_id) VALUES ($1) RETURNING id',
         [req.session.userId]
       );
-      const newSession = await dbService.query('SELECT * FROM sessions WHERE id = ?', [lastID]);
+      const newSession = await dbService.query('SELECT * FROM sessions WHERE id = $1', [lastID]);
       const session = newSession[0];
       
       console.log(`Created session ${session.id} for user ${req.session.userId}`);
@@ -248,7 +252,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
       const result = await dbService.transaction(async () => {
         const session = await dbService.query(
-          'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+          'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
           [sessionId, userId]
         );
         
@@ -257,7 +261,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         }
 
         const deleteResult = await dbService.run(
-          'DELETE FROM sessions WHERE id = ? AND user_id = ?',
+          'DELETE FROM sessions WHERE id = $1 AND user_id = $2',
           [sessionId, userId]
         );
 
@@ -298,7 +302,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       const userId = req.session.userId;
 
       const sessionRows = await dbService.query(
-        'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+        'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
         [id, userId]
       );
       
@@ -311,7 +315,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         `SELECT s.*, e.id as exercise_id, e.name as exercise_name 
          FROM sets s
          JOIN exercises e ON s.exercise_id = e.id
-         WHERE s.session_id = ?
+         WHERE s.session_id = $1
          ORDER BY s.id`,
         [id]
       );
@@ -343,7 +347,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
     try {
-      const result = await dbService.run('INSERT INTO exercises (name) VALUES (?)', [name]);
+      const result = await dbService.run('INSERT INTO exercises (name) VALUES ($1) RETURNING id', [name]);
       res.status(201).json({ id: result.lastID, name });
     } catch (e) {
       res.status(400).json({ error: 'Exercise already exists or invalid' });
@@ -353,9 +357,9 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   // Delete an exercise (only if not referenced in sets)
   app.delete('/api/exercises/:id', ensureLoggedIn, async (req, res) => {
     const { id } = req.params;
-    const used = await dbService.query('SELECT 1 FROM sets WHERE exercise_id = ?', [id]);
+    const used = await dbService.query('SELECT 1 FROM sets WHERE exercise_id = $1', [id]);
     if (used.length > 0) return res.status(400).json({ error: 'Exercise is in use' });
-    const result = await dbService.run('DELETE FROM exercises WHERE id = ?', [id]);
+    const result = await dbService.run('DELETE FROM exercises WHERE id = $1', [id]);
     if (result.changes === 0) return res.status(404).json({ error: 'Exercise not found' });
     res.json({ id: Number(id) });
   });
@@ -372,7 +376,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'exercise_id and reps required' });
       }
       //Retrieve exercise name and hrow error if exercise does not exist
-      const exercise = await dbService.query('SELECT * FROM exercises WHERE id = ?', [exercise_id]);
+      const exercise = await dbService.query('SELECT * FROM exercises WHERE id = $1', [exercise_id]);
       if (exercise.length ===  0) {
         return res.status(404).json({ error: 'Exercise not found' });
       }
@@ -381,14 +385,14 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
       // Verify session exists and belongs to user
       const sess = await dbService.query(
-        'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+        'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
         [sessionId, req.session.userId]
       );
       if (!sess.length) return res.status(404).json({ error: 'Session not found' });
 
       // Create set
       const result = await dbService.run(
-        'INSERT INTO sets (exercise_id, session_id, reps, weight) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sets (exercise_id, session_id, reps, weight) VALUES ($1, $2, $3, $4) RETURNING id',
         [exercise_id, sessionId, reps, weight || null]
       );
 
@@ -431,7 +435,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         const set = await dbService.query(
           `SELECT s.* FROM sets s
            JOIN sessions sess ON s.session_id = sess.id
-           WHERE s.id = ? AND sess.user_id = ?`,
+           WHERE s.id = $1 AND sess.user_id = $2`,
           [id, userId]
         );
         
@@ -441,7 +445,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
         // Delete the set
         const result = await dbService.run(
-          `DELETE FROM sets WHERE id = ?`,
+          `DELETE FROM sets WHERE id = $1`,
           [id]
         );
         
@@ -475,7 +479,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
       const result = await dbService.transaction(async (db) => {
         const session = await dbService.query(
-          'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+          'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
           [id, userId]
         );
         
@@ -484,8 +488,8 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         // Update and return the updated session data
         const updatedSession = await dbService.query(
           `UPDATE sessions 
-          SET closed = 1, end_time = CURRENT_TIMESTAMP 
-          WHERE id = ? AND user_id = ?
+          SET closed = 1, end_time = NOW() 
+          WHERE id = $1 AND user_id = $2
           RETURNING *`,
           [id, userId]
         );
@@ -529,7 +533,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 app.get('/api/user', async (req, res) => {
   const { username } = req.query;
   if (!username) return res.status(400).json({ error: 'Username required' });
-  const users = await dbService.query('SELECT id, username FROM users WHERE username = ?', [username]);
+  const users = await dbService.query('SELECT id, username FROM users WHERE username = $1', [username]);
   if (users.length === 0) return res.status(404).json({ error: 'User not found' });
   res.json(users[0]);
 });
@@ -540,9 +544,9 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
   if (!userId) return res.status(400).json({ error: 'User ID required' });
   if (userId === req.session.userId) return res.status(400).json({ error: 'Cannot follow yourself' });
   // Check if already following
-  const exists = await dbService.query('SELECT * FROM follows WHERE follower_id = ? AND following_id = ?', [req.session.userId, userId]);
+  const exists = await dbService.query('SELECT * FROM follows WHERE follower_id = $1 AND following_id = $2', [req.session.userId, userId]);
   if (exists.length > 0) return res.status(400).json({ error: 'Already following this user' });
-  await dbService.run('INSERT INTO follows (follower_id, following_id) VALUES (?, ?)', [req.session.userId, userId]);
+  await dbService.run('INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)', [req.session.userId, userId]);
   res.json({ success: true });
 });
 
@@ -552,10 +556,10 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
       const followingId = parseInt(req.params.userId);
       const followerId = req.session.userId;
 
-      await dbService.run(
-        'DELETE FROM follows WHERE follower_id = ? AND following_id = ?',
-        [followerId, followingId]
-      );
+  await dbService.run(
+    `UPDATE challenges SET status = 'closed', closed_at = NOW(), resolution_reason = 'certified' WHERE challenged_activity_id = $1 AND status = 'open'`,
+    [activity_id]
+  );
 
       res.json({ success: true });
     } catch (err) {
@@ -572,7 +576,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
         `SELECT u.id, u.username 
          FROM follows f 
          JOIN users u ON f.follower_id = u.id 
-         WHERE f.following_id = ?`,
+         WHERE f.following_id = $1`,
         [userId]
       );
       res.json(followers);
@@ -590,7 +594,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
         `SELECT u.id, u.username 
          FROM follows f 
          JOIN users u ON f.following_id = u.id 
-         WHERE f.follower_id = ?`,
+         WHERE f.follower_id = $1`,
         [userId]
       );
       res.json(following);
@@ -607,7 +611,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
       const notifications = await dbService.query(
         `SELECT id, activity_id, type, data, is_read, created_at 
          FROM notifications 
-         WHERE user_id = ? 
+         WHERE user_id = $1 
          ORDER BY created_at DESC 
          LIMIT 50`,
         [userId]
@@ -626,7 +630,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
       const notificationId = parseInt(req.params.id);
 
       await dbService.run(
-        'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
+        'UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2',
         [notificationId, userId]
       );
 
@@ -642,7 +646,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
     try {
       // First log the activity and get its ID
       const activityResult = await dbService.run(
-        'INSERT INTO user_activities (user_id, type, data) VALUES (?, ?, ?)',
+        'INSERT INTO user_activities (user_id, type, data) VALUES ($1, $2, $3) RETURNING id',
         [userId, activityType, JSON.stringify(activityData)]
       );
       const activityId = activityResult.lastID;
@@ -651,7 +655,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
       const followers = await dbService.query(
         `SELECT follower_id 
          FROM follows 
-         WHERE following_id = ?`,
+         WHERE following_id = $1`,
         [userId]
       );
       
@@ -659,7 +663,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
       // Notify each follower
       for (const follower of followers) {
         await dbService.run(
-          `INSERT INTO notifications (user_id, activity_id, type, data) VALUES (?, ?, ?, ?)`,
+          `INSERT INTO notifications (user_id, activity_id, type, data) VALUES ($1, $2, $3, $4)`,
           [follower.follower_id, activityId, activityType, JSON.stringify(activityData)]
         );
         
@@ -673,7 +677,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
   app.get('/api/me', ensureLoggedIn, async (req, res) => {    
     try {
       const userId = req.session.userId;
-      const user = await dbService.query('SELECT id, username FROM users WHERE id = ?', [userId]);
+      const user = await dbService.query('SELECT id, username FROM users WHERE id = $1', [userId]);
       if (!user.length) return res.status(404).json({ error: 'User not found' });
       res.json(user[0]);
     } catch (err) {
@@ -697,7 +701,7 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
     const users = await dbService.query(
       `SELECT u.id, u.username FROM users u
        JOIN follows f ON u.id = f.following_id
-       WHERE f.follower_id = ?`,
+       WHERE f.follower_id = $1`,
       [req.session.userId]
     );
     res.json(users);
@@ -713,7 +717,7 @@ app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
 
   // Get activity owner from user_activities table
   const activityOwner = await dbService.query(
-    `SELECT user_id FROM user_activities WHERE id = ?`,
+    `SELECT user_id FROM user_activities WHERE id = $1`,
     [challenged_activity_id]
   );
   if (!activityOwner.length) {
@@ -726,17 +730,17 @@ app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
     return res.status(400).json({ error: 'Cannot challenge your own activity' });
   }
   // Check if activity is already certified
-  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ?', [challenged_activity_id]);
+  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = $1', [challenged_activity_id]);
   if (certified.length > 0) {
     return res.status(400).json({ error: 'Activity already certified' });
   }
   // Check if already challenged
-  const existing = await dbService.query('SELECT 1 FROM challenges WHERE challenged_activity_id = ? AND status = "open"', [challenged_activity_id]);
+  const existing = await dbService.query('SELECT 1 FROM challenges WHERE challenged_activity_id = $1 AND status = \'open\'', [challenged_activity_id]);
   if (existing.length > 0) {
     return res.status(400).json({ error: 'Activity already challenged' });
   }
   await dbService.run(
-    `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES (?, ?, ?, 'open', ?)`,
+    `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES ($1, $2, $3, 'open', $4)`,
     [challenged_user_id, challenger_user_id, challenged_activity_id, expires_at || null]
   );
   res.json({ success: true });
@@ -748,12 +752,12 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
   const certifier_id = req.session.userId;
   if (!activity_id) return res.status(401).json({ error: 'Missing activity_id' });
   // Check if already certified
-  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = ? ', [activity_id]);
+  const certified = await dbService.query('SELECT 1 FROM certifications WHERE activity_id = $1', [activity_id]);
   if (certified.length > 0) return res.status(402).json({ error: 'Already certified' });
 
    // Get activity owner from user_activities table
   const activityOwner = await dbService.query(
-    `SELECT user_id FROM user_activities WHERE id = ?`,
+    `SELECT user_id FROM user_activities WHERE id = $1`,
     [activity_id]
   );
   
@@ -767,12 +771,12 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
 
   
   await dbService.run(    
-    `INSERT INTO certifications (activity_id, certifier_id) VALUES (?, ?)`,
+    `INSERT INTO certifications (activity_id, certifier_id) VALUES ($1, $2)`,
     [activity_id, certifier_id]
   );
   // Close any open challenges on this activity
   await dbService.run(
-    `UPDATE challenges SET status = 'closed', closed_at = CURRENT_TIMESTAMP, resolution_reason = 'certified' WHERE challenged_activity_id = ? AND status = 'open'`,
+    `UPDATE challenges SET status = 'closed', closed_at = NOW(), resolution_reason = 'certified' WHERE challenged_activity_id = $1 AND status = 'open'`,
     [activity_id]
   );
   res.json({ success: true });
@@ -782,18 +786,11 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
 app.get('/api/certifications/:id', ensureLoggedIn, async (req, res) => {
   try {
     const activityId = req.params.id;
-    
-    // Check if certification exists
     const certification = await dbService.query(
-      'SELECT 1 FROM certifications WHERE activity_id = ?',
+      'SELECT 1 FROM certifications WHERE activity_id = $1',
       [activityId]
     );
-
-    if (certification.length > 0) {
-      return res.status(200).json({ certified: true });
-    }
-    
-    res.status(404).json({ certified: false });
+    res.status(200).json({ certified: certification.length > 0 });
   } catch (err) {
     handleError(res, err);
   }
@@ -811,11 +808,11 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
       return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
     }
 
-    let query = 'SELECT * FROM challenges WHERE challenged_user_id = ?';
+    let query = 'SELECT * FROM challenges WHERE challenged_user_id = $1';
     const params = [userId];
     
     if (status !== 'both') {
-      query += ' AND status = ?';
+      query += ' AND status = $2';
       params.push(status);
     }
 
@@ -836,11 +833,11 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
       }
 
-      let query = 'SELECT * FROM challenges WHERE challenger_user_id = ?';
+      let query = 'SELECT * FROM challenges WHERE challenger_user_id = $1';
       const params = [userId];
       
       if (status !== 'both') {
-        query += ' AND status = ?';
+        query += ' AND status = $2';
         params.push(status);
       }
 
@@ -858,7 +855,7 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
       
       // Check if there's an open challenge for this activity
       const challenge = await dbService.query(
-        'SELECT 1 FROM challenges WHERE challenged_activity_id = ? AND status = "open"',
+        'SELECT 1 FROM challenges WHERE challenged_activity_id = $1 AND status = \'open\'',
         [activityId]
       );
 
@@ -876,7 +873,7 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
 
       // Get activity from database
       const activity = await dbService.query(
-        'SELECT * FROM user_activities WHERE id = ?',
+        'SELECT * FROM user_activities WHERE id = $1',
         [activityId]
       );
 

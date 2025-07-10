@@ -1,142 +1,103 @@
-const sqlite3 = require('sqlite3').verbose();
+const { Client } = require('pg');
 const { EventEmitter } = require('events');
 
 class DatabaseService extends EventEmitter {
-  constructor(env = 'production') {
+  constructor(env = process.env.NODE_ENV || 'development') {
     super();
     this.env = env;
-    
-    // Set DB configuration based on environment
-    if (this.env === 'test') {
-      this.dbFile = './test.db';
-      this.persistent = false;
-    } else {
-      this.dbFile = './gym.db';
-      this.persistent = true;
-    }
-
     this._db = null;
     this._initialized = false;
+    this.ssl = this.env === 'production' ? { rejectUnauthorized: false } : false;
+  }
+
+  async getConnection() {
+    if (this._db) return this._db;
+    
+    this._db = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: this.ssl
+    });
+    
+    try {
+      await this._db.connect();
+      await this._initializeDb(this._db);
+      return this._db;
+    } catch (err) {
+      this._db = null;
+      this.emit('error', err);
+      throw err;
+    }
   }
 
   async _initializeDb(db) {
     if (this._initialized) return;
     
-    // Initialize database
-    await new Promise((resolve, reject) => {
-      db.run('PRAGMA foreign_keys = ON', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Initialize schema
+    // Enable foreign key constraints
+    await db.query('SET CONSTRAINTS ALL IMMEDIATE');
+    
     const initModule = require('./init');
     await initModule.initializeDatabase({
-      run: (sql, params) => new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
-          if (err) reject(err);
-          else resolve(this);
-        });
-      }),
-      query: (sql, params) => new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      })
+      run: async (sql, params) => {
+        const result = await db.query(sql, params);
+        return { 
+          lastID: result.rows[0]?.id,
+          changes: result.rowCount 
+        };
+      },
+      query: (sql, params) => db.query(sql, params)
     });
-
+    
     this._initialized = true;
-  }
-
-  async getConnection() {
-    // Reuse existing connection if available
-    if (this._db) return this._db;
-    
-    // Create new connection
-    this._db = new sqlite3.Database(
-      this.dbFile,
-      this.dbFile.startsWith('file:') ? { uri: true } : undefined
-    );
-    
-    // Initialize database
-    await this._initializeDb(this._db);
-    return this._db;
   }
 
   async query(sql, params = []) {
     const db = await this.getConnection();
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) {
-          this.emit('error', err);
-          reject(err);
-        } else {
-          resolve(rows);
-        }
-      });
-    });
+    try {
+      const result = await db.query(sql, params);
+      return result.rows;
+    } catch (err) {
+      this.emit('error', err);
+      throw err;
+    }
   }
 
   async run(sql, params = []) {
     const db = await this.getConnection();
-    const self = this; // capture DatabaseService instance
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, function(err) {
-        if (err) {
-          self.emit('error', err);
-          reject(err);
-        } else {
-          resolve({ lastID: this.lastID, changes: this.changes });
-        }
-      });
-    });
+    try {
+      const result = await db.query(sql, params);
+      return {
+        lastID: result.rows[0]?.id,
+        changes: result.rowCount
+      };
+    } catch (err) {
+      this.emit('error', err);
+      throw err;
+    }
   }
-
-
 
   async transaction(operations) {
     const db = await this.getConnection();
-    
     try {
-      // Begin transaction
-      await new Promise((resolve, reject) => {
-        db.run('BEGIN TRANSACTION', (err) => 
-          err ? reject(err) : resolve()
-        );
-      });
-
-      // Execute operations
+      await db.query('BEGIN');
       const result = await operations(db);
-
-      // Commit transaction
-      await new Promise((resolve, reject) => {
-        db.run('COMMIT', (err) => 
-          err ? reject(err) : resolve()
-        );
-      });
-
+      await db.query('COMMIT');
       return result;
     } catch (err) {
-      // Rollback on error
-      await new Promise((resolve) => {
-        db.run('ROLLBACK', () => resolve());
-      });
+      await db.query('ROLLBACK');
       throw err;
     }
   }
 
   async close() {
     if (this._db) {
-      await new Promise((resolve) => {
-        this._db.close((err) => {
-          if (err) this.emit('error', err);
-          resolve();
-        });
-      });
-      this._db = null;
-      this._initialized = false;
+      try {
+        await this._db.end();
+      } catch (err) {
+        this.emit('error', err);
+      } finally {
+        this._db = null;
+        this._initialized = false;
+      }
     }
   }
 }
