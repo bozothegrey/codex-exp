@@ -1,10 +1,5 @@
 async function fetchSessions() {
-  const res = await fetch('/api/sessions');
-// remove redirect on 410 to Login
-// if (res.status === 401) {
-//    window.location.href = '/login.html';
-//    return;
-//}
+  const res = await fetch(`${config.apiBaseUrl}/api/sessions`);
   const data = await res.json();
   const tbody = document.querySelector('#sessionsTable tbody');
   tbody.innerHTML = '';
@@ -28,23 +23,18 @@ async function fetchSessions() {
 
 document.getElementById('sessionForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const res = await fetch('/api/sessions', {
+  const res = await fetch(`${config.apiBaseUrl}/api/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({})
   });
-  // remove redirect on 410 to Login
-  // if (res.status === 401) {
-  //   window.location.href = '/login.html';
-  //   return;
-  // }
   const session = await res.json();
   window.location.href = `session.html?id=${session.id}`;
 });
 
 async function updateAuthLinks() {
   try {
-    const res = await fetch('/api/me');    
+    const res = await fetch(`${config.apiBaseUrl}/api/me`);    
     if (res.ok) {
       const user = await res.json();     
       document.getElementById('usernameDisplay').innerText = user.username;
@@ -60,7 +50,7 @@ async function updateAuthLinks() {
     console.log('Auth check error:', e);
     document.getElementById('usernameDisplay').style.display = 'none';
     document.getElementById('loginLink').style.display = '';
-      document.getElementById('logoutLink').style.display = 'none';
+    document.getElementById('logoutLink').style.display = 'none';
   }
 }
 
@@ -73,12 +63,12 @@ document.getElementById('findUserBtn').addEventListener('click', async () => {
     return;
   }
   try {
-    const res = await fetch(`/api/user?username=${encodeURIComponent(username)}`);
+    const res = await fetch(`${config.apiBaseUrl}/api/user?username=${encodeURIComponent(username)}`);
     if (res.ok) {
       const user = await res.json();
       resultDiv.innerHTML = `<span>Username: <b>${user.username}</b></span> <button id="followUserBtn" class="follow-tick" title="Follow">&#10003;</button>`;
       document.getElementById('followUserBtn').onclick = async () => {
-        const followRes = await fetch(`/api/follow/${user.id}`, {
+        const followRes = await fetch(`${config.apiBaseUrl}/api/follow/${user.id}`, {
           method: 'POST'
         });
         if (followRes.ok) {
@@ -101,7 +91,7 @@ async function fetchFollowedUsers() {
   const ul = document.getElementById('followedUsersList');
   ul.innerHTML = '';
   try {
-    const res = await fetch('/api/follows');
+    const res = await fetch(`${config.apiBaseUrl}/api/follows`);
     if (res.ok) {
       const users = await res.json();
       users.forEach(user => addFollowedUserToList(user));
@@ -121,7 +111,7 @@ function addFollowedUserToList(user) {
   btn.title = 'Unfollow';
   btn.onclick = async () => {
     try {
-      const res = await fetch(`/api/follow/${user.id}`, {
+      const res = await fetch(`${config.apiBaseUrl}/api/follow/${user.id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -140,7 +130,7 @@ function addFollowedUserToList(user) {
 async function handleCertify(activityId, li) {
   try {
     console.log('Certifying activity:', activityId);
-    const res = await fetch('/api/certifications', {
+    const res = await fetch(`${config.apiBaseUrl}/api/certifications`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -164,7 +154,7 @@ async function handleCertify(activityId, li) {
 async function handleChallenge(activityId, li) {
   try {
     console.log('Challenging activity:', activityId);
-    const res = await fetch('/api/challenges', {
+    const res = await fetch(`${config.apiBaseUrl}/api/challenges`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -181,7 +171,6 @@ async function handleChallenge(activityId, li) {
       return;
     }
 
-    // Enhanced error handling
     const err = await res.json();
     console.error('Challenge error:', {
       status: res.status,
@@ -211,7 +200,7 @@ async function fetchNotifications() {
   const ul = document.getElementById('notificationsList');
   ul.innerHTML = '';
   try {
-    const res = await fetch('/api/notifications');
+    const res = await fetch(`${config.apiBaseUrl}/api/notifications`);
     if (res.ok) {
       const notifications = await res.json();
       for (const n of notifications) {
@@ -230,10 +219,9 @@ async function fetchNotifications() {
           msg = `${data.username || 'A user you follow'} performed ${data.reps} reps of ${data.exercise_name || 'an exercise'} at ${ data.weight ? data.weight + 'kg' : 'body'} weight`;          
           li.appendChild(document.createTextNode(msg));
             try {
-            const certRes = await fetch(`/api/certifications/${activityId}`);
+            const certRes = await fetch(`${config.apiBaseUrl}/api/certifications/${activityId}`);
             const certData = await certRes.json();
             if (certData.certified) {
-              // Activity is certified - add tag and skip buttons
               const certTag = document.createElement('span');
               certTag.className = 'certified-tag';
               certTag.textContent = ' #certified';
@@ -241,14 +229,13 @@ async function fetchNotifications() {
               certTag.style.marginLeft = '5px';
               li.appendChild(certTag);
             } else {
-              // Activity not certified - add buttons
               const certifyBtn = document.createElement('button');
               certifyBtn.className = 'certify-btn icon-btn';
               certifyBtn.title = 'Certify this activity';
               certifyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" stroke="#1ca21c" stroke-width="2"/><path d="M5 8L7 10L11 6" stroke="#1ca21c" stroke-width="2" stroke-linecap="round"/></svg>';
               certifyBtn.onclick = (e) => { e.stopPropagation(); handleCertify(activityId, li); };
               li.appendChild(certifyBtn);
-              const challengeRes = await fetch(`/api/challenges/${activityId}`);
+              const challengeRes = await fetch(`${config.apiBaseUrl}/api/challenges/${activityId}`);
               const data = await challengeRes.json();
               if (!data.hasOpenChallenge) {
                 const challengeBtn = document.createElement('button');
@@ -287,8 +274,6 @@ async function fetchNotifications() {
           li.appendChild(document.createTextNode(msg));
         }
         ul.appendChild(li);
-        
-        
       }
     }
   } catch (e) {
@@ -298,10 +283,8 @@ async function fetchNotifications() {
 
 function startNotificationsPolling() {
   fetchNotifications();
-  setInterval(fetchNotifications, 5000); // Poll every 5 seconds
+  setInterval(fetchNotifications, 5000);
 }
-
-// --- Challenges Section ---
 
 function renderChallengeList(listElem, challenges) {
   listElem.innerHTML = '';
@@ -327,7 +310,7 @@ async function fetchChallengesReceived(status) {
   const ul = document.getElementById('challengesReceivedList');
   ul.innerHTML = '<li>Loading...</li>';
   try {
-    const res = await fetch(`/api/challenges?status=${status}`);
+    const res = await fetch(`${config.apiBaseUrl}/api/challenges?status=${status}`);
     if (res.ok) {
       const challenges = await res.json();
       renderChallengeList(ul, challenges);
@@ -343,7 +326,7 @@ async function fetchChallengesGiven(status) {
   const ul = document.getElementById('challengesGivenList');
   ul.innerHTML = '<li>Loading...</li>';
   try {
-    const res = await fetch(`/api/challenges/given?status=${status}`);
+    const res = await fetch(`${config.apiBaseUrl}/api/challenges/given?status=${status}`);
     if (res.ok) {
       const challenges = await res.json();
       renderChallengeList(ul, challenges);
@@ -381,15 +364,13 @@ function setupChallengeFilters() {
   document.getElementById('givenFilterClosed').onclick = () => setGivenStatus('closed');
   document.getElementById('givenFilterBoth').onclick = () => setGivenStatus('both');
 
-  // Initial fetch
   setReceivedStatus(receivedStatus);
   setGivenStatus(givenStatus);
 
-  // Polling
   setInterval(() => {
     fetchChallengesReceived(receivedStatus);
     fetchChallengesGiven(givenStatus);
-  }, 10000); // every 10s
+  }, 10000);
 }
 
 function setupTerminateButtons() {
@@ -397,19 +378,19 @@ function setupTerminateButtons() {
     if (e.target.classList.contains('terminate-action')) {
       const sessionId = e.target.dataset.id;
       if (confirm('Are you sure you want to terminate this session?')) {
-        await fetch(`/api/sessions/${sessionId}/close`, { 
+        await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}/close`, { 
           method: 'POST' 
         });
-        fetchSessions(); // Refresh the list
+        fetchSessions();
       }
     } else if (e.target.classList.contains('delete-action')) {
       const sessionId = e.target.dataset.id;
       if (confirm('Are you sure you want to delete this session? This cannot be undone.')) {
-        const res = await fetch(`/api/sessions/${sessionId}`, {
+        const res = await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}`, {
           method: 'DELETE'
         });
         if (res.ok) {
-          fetchSessions(); // Refresh the list
+          fetchSessions();
         } else {
           alert('Failed to delete session');
         }
