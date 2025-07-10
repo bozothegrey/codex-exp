@@ -194,7 +194,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   app.get('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
       const sessions = await dbService.query(
-        'SELECT * FROM sessions WHERE user_id = ? ORDER BY date DESC',
+        'SELECT * FROM sessions WHERE user_id = ? ORDER BY start_time DESC',
         [req.session.userId]
       );
       res.json(sessions);
@@ -205,22 +205,13 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
   app.post('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
-      const { date } = req.body;
-      if (!date) {
-        return res.status(400).json({ error: 'date is required' });
-      }
-
       const { lastID } = await dbService.run(
-        'INSERT INTO sessions (user_id, date) VALUES (?, ?)',
-        [req.session.userId, date]
+        'INSERT INTO sessions (user_id) VALUES (?)',
+        [req.session.userId]
       );
-
-      const session = {
-        id: lastID,
-        date,
-        closed: 0,
-        user_id: req.session.userId
-      };
+      const newSession = await dbService.query('SELECT * FROM sessions WHERE id = ?', [lastID]);
+      const session = newSession[0];
+      
       console.log(`Created session ${session.id} for user ${req.session.userId}`);
       
       dbService.emit('session:created', session);
@@ -231,7 +222,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         'session_started',
         {
           sessionId: session.id,
-          date: session.date,
+          date: session.start_time,
           username: req.session.username
         }
       );
@@ -290,7 +281,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         'session_deleted',
         {
           sessionId: sessionId,
-          date: result.session.date,
+          date: result.session.start_time,
           username: req.session.username
         }
       );
@@ -488,16 +479,21 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
           [id, userId]
         );
         
-        if (session.length === 0) {
-          return { changes: 0 };
-        }
+        if (session.length === 0) return { changes: 0 };        
 
-        const result = await dbService.run(
-          'UPDATE sessions SET closed = 1 WHERE id = ? AND user_id = ?',
+        // Update and return the updated session data
+        const updatedSession = await dbService.query(
+          `UPDATE sessions 
+          SET closed = 1, end_time = CURRENT_TIMESTAMP 
+          WHERE id = ? AND user_id = ?
+          RETURNING *`,
           [id, userId]
         );
 
-        return { ...result, session: session[0] };
+        return { 
+          changes: 1, 
+          session: updatedSession[0] // Now contains end_time
+        };
       });
 
       if (result.changes === 0) {
@@ -509,16 +505,16 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         userId,
         sessionData: result.session
       };
-      dbService.emit('session:closed', sessionData);
-
+      dbService.emit('session:closed', sessionData);      
+      
       // Notify followers about session ending
       await notifyFollowers(
         userId,
         'session_ended',
         {
           sessionId: id,
-          date: result.session.date,
-          duration: new Date() - new Date(result.session.date),
+          date: result.session.start_time,
+          duration: Math.floor((new Date(result.session.end_time) - new Date(result.session.start_time)) / 60000),
           username: req.session.username
         }
       );
@@ -746,7 +742,7 @@ app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
   res.json({ success: true });
 });
 
-// Certify an activity
+  // Certify an activity
 app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
   const { activity_id } = req.body;
   const certifier_id = req.session.userId;
@@ -780,6 +776,27 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
     [activity_id]
   );
   res.json({ success: true });
+});
+
+// Check if activity is certified
+app.get('/api/certifications/:id', ensureLoggedIn, async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    
+    // Check if certification exists
+    const certification = await dbService.query(
+      'SELECT 1 FROM certifications WHERE activity_id = ?',
+      [activityId]
+    );
+
+    if (certification.length > 0) {
+      return res.status(200).json({ certified: true });
+    }
+    
+    res.status(404).json({ certified: false });
+  } catch (err) {
+    handleError(res, err);
+  }
 });
 
 
@@ -829,6 +846,23 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
 
       const challenges = await dbService.query(query, params);
       res.json(challenges);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Check if activity has an open challenge
+  app.get('/api/challenges/:id', ensureLoggedIn, async (req, res) => {
+    try {
+      const activityId = req.params.id;
+      
+      // Check if there's an open challenge for this activity
+      const challenge = await dbService.query(
+        'SELECT 1 FROM challenges WHERE challenged_activity_id = ? AND status = "open"',
+        [activityId]
+      );
+
+      res.json({ hasOpenChallenge: challenge.length > 0 });
     } catch (err) {
       handleError(res, err);
     }

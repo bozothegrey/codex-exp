@@ -36,7 +36,7 @@ async function loadSession() {
       console.error('Empty session data received');
       return;
     }
-    document.getElementById('sessionTitle').textContent = `Session ${data.date}`;
+    document.getElementById('sessionTitle').textContent = `Session started at ${new Date(data.start_time).toLocaleString()}`;
 
     const list = document.getElementById('setList');
     list.innerHTML = '';

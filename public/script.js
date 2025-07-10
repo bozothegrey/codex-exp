@@ -17,18 +17,21 @@ async function fetchSessions() {
        <span class="session-action delete-action" data-id="${row.id}" style="color:red">Delete</span>` :
       `<a href="${editUrl}" class="session-action">Resume</a> | 
        <span class="session-action terminate-action" data-id="${row.id}">Terminate</span>`;
-    tr.innerHTML = `<td>${row.date}</td><td>${row.closed ? 'Closed' : 'Open'}</td><td>${actions}</td>`;
+    const startTime = new Date(row.start_time).toLocaleString();
+    const duration = row.closed && row.end_time ? 
+      Math.floor((new Date(row.end_time) - new Date(row.start_time)) / 60000) + 'm' : 
+      '';
+    tr.innerHTML = `<td>${startTime}</td><td>${duration}</td><td>${row.closed ? 'Closed' : 'Open'}</td><td>${actions}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 document.getElementById('sessionForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const date = document.getElementById('date').value;
   const res = await fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date })
+    body: JSON.stringify({})
   });
   // remove redirect on 410 to Login
   // if (res.status === 401) {
@@ -211,44 +214,81 @@ async function fetchNotifications() {
     const res = await fetch('/api/notifications');
     if (res.ok) {
       const notifications = await res.json();
-      notifications.forEach(n => {
+      for (const n of notifications) {
         const li = document.createElement('li');
         li.dataset.notification = JSON.stringify({
           id: n.id,
           type: n.type,
-          user_id: n.user_id,
+          user_id: n.user_id,          
           username: n.username,
           data: n.data
         });
         let msg = '';
-        let activityId = null;
+        let activityId = n.activity_id;
         if (n.type === 'set_logged') {
           const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
-          msg = `${data.username || 'A user you follow'} performed ${data.reps} reps of ${data.exercise_name || 'an exercise'} at ${data.weight || 'body'} weight`;
-          activityId = data.setId || data.set_id || data.activity_id;
+          msg = `${data.username || 'A user you follow'} performed ${data.reps} reps of ${data.exercise_name || 'an exercise'} at ${ data.weight ? data.weight + 'kg' : 'body'} weight`;          
+          li.appendChild(document.createTextNode(msg));
+          try {
+            const certRes = await fetch(`/api/certifications/${activityId}`);
+            if (certRes.ok) {
+              // Activity is certified - add tag and skip buttons
+              const certTag = document.createElement('span');
+              certTag.className = 'certified-tag';
+              certTag.textContent = ' #certified';
+              certTag.style.color = '#1ca21c';
+              certTag.style.marginLeft = '5px';
+              li.appendChild(certTag);
+            } else {
+              // Activity not certified - add buttons
+              const certifyBtn = document.createElement('button');
+              certifyBtn.className = 'certify-btn icon-btn';
+              certifyBtn.title = 'Certify this activity';
+              certifyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" stroke="#1ca21c" stroke-width="2"/><path d="M5 8L7 10L11 6" stroke="#1ca21c" stroke-width="2" stroke-linecap="round"/></svg>';
+              certifyBtn.onclick = (e) => { e.stopPropagation(); handleCertify(activityId, li); };
+              li.appendChild(certifyBtn);
+              const challengeRes = await fetch(`/api/challenges/${activityId}`);
+              const data = await challengeRes.json();
+              if (!data.hasOpenChallenge) {
+                const challengeBtn = document.createElement('button');
+                challengeBtn.className = 'challenge-btn icon-btn';
+                challengeBtn.title = 'Challenge this activity';
+                challengeBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="white" stroke="#D32F2F" stroke-width="2"/><path d="M11 7h2v7h-2z" fill="#D32F2F"/><path d="M11 15h2v2h-2z" fill="#D32F2F"/></svg>';
+                challengeBtn.onclick = (e) => { e.stopPropagation(); handleChallenge(activityId, li); };
+                li.appendChild(challengeBtn);
+              } else {
+                const challengeTag = document.createElement('span');
+                challengeTag.className = 'challenged-tag';
+                challengeTag.textContent = ' #challenged';
+                challengeTag.style.color = '#ff0000';
+                challengeTag.style.marginLeft = '5px';
+                li.appendChild(challengeTag);              
+              }
+            }
+          } catch (e) {
+            console.error('Error checking certification status:', e);
+          }
+        } else if (n.type === 'session_started') {
+          const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+          const date = new Date(n.created_at);
+          const formattedDate = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+          msg = `Session started by ${data.username} at ${formattedDate}`;
+          li.appendChild(document.createTextNode(msg));
+        } else if (n.type === 'session_ended') {
+          const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+          const date = new Date(n.created_at);
+          const formattedDate = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+          const durationMinutes = Math.floor((data.duration || 0) / 60000);
+          msg = `Session ended by ${data.username} at ${formattedDate} (Duration: ${durationMinutes}m)`;
+          li.appendChild(document.createTextNode(msg));
         } else {
           msg = n.message || n.type;
-        }
-        li.appendChild(document.createTextNode(msg));
-        if (activityId) {
-          // Add certify (checkmark) icon
-          const certifyBtn = document.createElement('button');
-          certifyBtn.className = 'certify-btn icon-btn';
-          certifyBtn.title = 'Certify this activity';
-          certifyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" stroke="#1ca21c" stroke-width="2"/><path d="M5 8L7 10L11 6" stroke="#1ca21c" stroke-width="2" stroke-linecap="round"/></svg>';
-          certifyBtn.onclick = (e) => { e.stopPropagation(); handleCertify(activityId, li); };
-          li.appendChild(certifyBtn);
-
-          // Add challenge (question mark) icon
-          const challengeBtn = document.createElement('button');
-          challengeBtn.className = 'challenge-btn icon-btn';
-          challengeBtn.title = 'Challenge this activity';
-          challengeBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 14A6 6 0 108 2a6 6 0 000 12z" fill="#fff" stroke="#ff0000" stroke-width="1"/><path d="M8 12a1 1 0 100-2 1 1 0 000 2zM8 9V7a2 2 0 012-2" stroke="#ff0000" stroke-width="1.5" stroke-linecap="round"/></svg>';
-          challengeBtn.onclick = (e) => { e.stopPropagation(); handleChallenge(activityId, li); };
-          li.appendChild(challengeBtn);
+          li.appendChild(document.createTextNode(msg));
         }
         ul.appendChild(li);
-      });
+        
+        
+      }
     }
   } catch (e) {
     // Optionally handle error

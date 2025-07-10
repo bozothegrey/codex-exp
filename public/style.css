@@ -196,13 +196,15 @@ th, td {
   background: none;
   border: none;
   padding: 0 2px;
-  margin-left: 6px;
+  margin-left: 4px;
   cursor: pointer;
   vertical-align: middle;
   outline: none;
   transition: background 0.15s;
 }
 .icon-btn svg {
+  width: 20px;
+  height: 20px;
   display: inline-block;
   vertical-align: middle;
 }
@@ -211,15 +213,6 @@ th, td {
 }
 .certify-btn.done svg circle {
   stroke: #aaa;
-}
-.challenge-btn svg rect:first-child {
-  fill: #ff6600;
-}
-.challenge-btn svg rect:not(:first-child) {
-  fill: #888;
-}
-.challenge-btn.done svg rect:first-child {
-  fill: #aaa;
 }
 .icon-btn:focus {
   background: #ffe0b3;

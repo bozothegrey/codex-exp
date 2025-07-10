@@ -18,9 +18,10 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
         await dbService.run(`CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
+            start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            end_time TIMESTAMP,
             location_id INTEGER DEFAULT 0,
-            closed INTEGER DEFAULT 0,            
+            closed INTEGER DEFAULT 0,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`);
                 
@@ -78,7 +79,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             certifier_id INTEGER NOT NULL,            
             certified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(activity_id, certifier_id),
-            FOREIGN KEY (activity_id) REFERENCES sets(id) ON DELETE CASCADE,
+            FOREIGN KEY (activity_id) REFERENCES user_activities(id) ON DELETE CASCADE,
             FOREIGN KEY (certifier_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
 
@@ -95,8 +96,8 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             resolution_reason TEXT,
             FOREIGN KEY (challenged_user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (challenger_user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (challenged_activity_id) REFERENCES sets(id) ON DELETE CASCADE,
-            FOREIGN KEY (resolving_activity_id) REFERENCES sets(id) ON DELETE CASCADE
+            FOREIGN KEY (challenged_activity_id) REFERENCES user_activities(id) ON DELETE CASCADE,
+            FOREIGN KEY (resolving_activity_id) REFERENCES user_activities(id) ON DELETE CASCADE
         )`);
 
         // Insert default users if requested and none exist
