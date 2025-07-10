@@ -6,6 +6,7 @@ const express = require('express');
 const path = require('path');
 const session = require('express-session');
 const bcrypt = require('bcrypt');
+const cors = require('cors');
 const DatabaseService = require('./db/dbService');
 const { setupChallengeJobs } = require('./db/challengeJobs');
 
@@ -31,6 +32,15 @@ function createApp(sessionConfig = {}, dbService) {
   };
 
   // Configure middleware
+  const corsOptions = {
+    origin: process.env.NODE_ENV === 'production' 
+      ? ['https://bozothegrey.github.io', 'https://codex-exp.onrender.com']
+      : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  };
+  app.use(cors(corsOptions));
   app.use(express.json());
   app.use(session(finalSessionConfig));
   app.use(express.static(path.join(__dirname, 'public')));

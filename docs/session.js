@@ -1,10 +1,12 @@
+import { config } from './config.js';
+
 const params = new URLSearchParams(window.location.search);
 const sessionId = params.get('id');
 const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
 let allExercises = [];
 
 async function loadExercises() {
-  const res = await fetch('/api/exercises');
+  const res = await fetch(`${config.apiBaseUrl}/api/exercises`);
   allExercises = await res.json();
   const datalist = document.getElementById('exerciseSuggestions');
   datalist.innerHTML = '';
@@ -17,7 +19,7 @@ async function loadExercises() {
 
 async function loadSession() {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    const res = await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}`);
     if (!res.ok) {
       const errorText = await res.text();
       console.error('Failed to load session:', {
@@ -57,7 +59,7 @@ async function loadSession() {
         deleteBtn.style.background = 'none';
         deleteBtn.style.cursor = 'pointer';
         deleteBtn.addEventListener('click', async () => {
-          await fetch(`/api/sets/${set.id}`, { method: 'DELETE' });
+          await fetch(`${config.apiBaseUrl}/api/sets/${set.id}`, { method: 'DELETE' });
           loadSession();
         });
         li.appendChild(deleteBtn);
@@ -106,7 +108,7 @@ if (setForm) {
     }
     const reps = document.getElementById('setReps').value;
     const weight = document.getElementById('setWeight').value;
-    await fetch(`/api/sessions/${sessionId}/sets`, {
+    await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}/sets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -131,7 +133,7 @@ const terminateSession = document.getElementById('terminateSession');
 if (terminateSession) {
   terminateSession.addEventListener('click', async () => {
     if (confirm('Are you sure you want to terminate this session?')) {
-      await fetch(`/api/sessions/${sessionId}/close`, { method: 'POST' });
+      await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}/close`, { method: 'POST' });
       window.location.href = 'index.html';
     }
   });
@@ -141,7 +143,7 @@ const deleteSession = document.getElementById('deleteSession');
 if (deleteSession) {
   deleteSession.addEventListener('click', async () => {
     if (confirm('Are you sure you want to permanently delete this session? This cannot be undone.')) {
-      const res = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+      const res = await fetch(`${config.apiBaseUrl}/api/sessions/${sessionId}`, { method: 'DELETE' });
       if (res.ok) {
         window.location.href = 'index.html';
       } else {
