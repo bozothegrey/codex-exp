@@ -10,7 +10,7 @@ const cors = require('cors');
 const DatabaseService = require('./db/dbService');
 const { setupChallengeJobs } = require('./db/challengeJobs');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 const DB_FILE = process.env.DB_FILE || 'gym.db';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'secret-key';
 
