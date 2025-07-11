@@ -28,12 +28,28 @@ The SQLite database file `gym.db` will be created automatically in the project d
 Build and run with Docker:
 ```bash
 docker build -t boga .
-docker run -d -p 3000:3000 \
-  -e SESSION_SECRET=$(grep SESSION_SECRET .env | cut -d '=' -f2) \
-  -v ${PWD}/gym.db:/app/gym.db \
-  --name boga-container \
-  BoGa
+$env:SESSION_SECRET = (Get-Content .env | Select-String "SECRET_KEY").Line.Split('=')[1].Trim()
+docker run -d -p 3000:3000 `
+  -e SESSION_SECRET=$env:SESSION_SECRET `
+  -v ${PWD}/gym.db:/app/gym.db `
+  --name boga-container `
+  boga
 ```
+# Tag your image
+docker tag boga gcr.io/boga-465619/boga:latest
+# Push to GCR
+docker push gcr.io/boga-465619/boga:latest
+
+## Deploy to GCloud run
+gcloud run deploy boga `
+  --image gcr.io/boga-465619/boga:latest `
+  --platform managed `
+  --region us-central1 `
+  --allow-unauthenticated `
+  --set-env-vars "NODE_ENV=production" `
+  --port 3000 `
+  --timeout 300s `
+  --set-env-vars "SESSION_SECRET=$env:SESSION_SECRET"
 
 ## Project structure
 - `server.js` – Express backend and API
