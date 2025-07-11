@@ -27,8 +27,12 @@ The SQLite database file `gym.db` will be created automatically in the project d
 ## Docker
 Build and run with Docker:
 ```bash
-docker build -t gym-app .
-docker run -p 3000:3000 gym-app
+docker build -t boga .
+docker run -d -p 3000:3000 \
+  -e SESSION_SECRET=$(grep SESSION_SECRET .env | cut -d '=' -f2) \
+  -v ${PWD}/gym.db:/app/gym.db \
+  --name boga-container \
+  BoGa
 ```
 
 ## Project structure
