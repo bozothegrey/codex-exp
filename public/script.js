@@ -229,9 +229,10 @@ async function fetchNotifications() {
           const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
           msg = `${data.username || 'A user you follow'} performed ${data.reps} reps of ${data.exercise_name || 'an exercise'} at ${ data.weight ? data.weight + 'kg' : 'body'} weight`;          
           li.appendChild(document.createTextNode(msg));
-          try {
+            try {
             const certRes = await fetch(`/api/certifications/${activityId}`);
-            if (certRes.ok) {
+            const certData = await certRes.json();
+            if (certData.certified) {
               // Activity is certified - add tag and skip buttons
               const certTag = document.createElement('span');
               certTag.className = 'certified-tag';

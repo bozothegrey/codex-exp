@@ -782,18 +782,11 @@ app.post('/api/certifications', ensureLoggedIn, async (req, res) => {
 app.get('/api/certifications/:id', ensureLoggedIn, async (req, res) => {
   try {
     const activityId = req.params.id;
-    
-    // Check if certification exists
     const certification = await dbService.query(
       'SELECT 1 FROM certifications WHERE activity_id = ?',
       [activityId]
     );
-
-    if (certification.length > 0) {
-      return res.status(200).json({ certified: true });
-    }
-    
-    res.status(404).json({ certified: false });
+    res.status(200).json({ certified: certification.length > 0 });
   } catch (err) {
     handleError(res, err);
   }
