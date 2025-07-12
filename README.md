@@ -35,12 +35,16 @@ docker run -d -p 3000:3000 `
   --name boga-container `
   boga
 ```
-# Tag your image
-docker tag boga gcr.io/boga-465619/boga:latest
-# Push to GCR
-docker push gcr.io/boga-465619/boga:latest
+latest
 
 ## Deploy to GCloud run
+### Tag your image
+```bash
+docker tag boga gcr.io/boga-465619/boga:latest
+```
+### Push to GCR
+```bash
+docker push gcr.io/boga-465619/boga:
 gcloud run deploy boga `
   --image gcr.io/boga-465619/boga:latest `
   --platform managed `
@@ -50,7 +54,7 @@ gcloud run deploy boga `
   --port 3000 `
   --timeout 300s `
   --set-env-vars "SESSION_SECRET=$env:SESSION_SECRET"
-
+```
 ## Project structure
 - `server.js` – Express backend and API
 - `public/` – static frontend files
