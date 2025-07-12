@@ -298,7 +298,7 @@ async function fetchNotifications() {
 
 function startNotificationsPolling() {
   fetchNotifications();
-  setInterval(fetchNotifications, 5000); // Poll every 5 seconds
+  setInterval(fetchNotifications, 60000); // Poll every 1 minute
 }
 
 // --- Challenges Section ---
