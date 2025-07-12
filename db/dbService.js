@@ -11,12 +11,23 @@ class DatabaseService extends EventEmitter {
       this.dbFile = './test.db';
       this.persistent = false;
     } else {
-      this.dbFile = './gym.db';
+      this.dbFile = process.env.DB_PATH || './gym.db';
       this.persistent = true;
     }
 
     this._db = null;
     this._initialized = false;
+  }
+
+  async ensureDatabaseExists() {
+    const fs = require('fs');
+    if (!fs.existsSync(this.dbFile)) {
+      console.log('Initializing new database file at', this.dbFile);
+      // Create empty file if it doesn't exist
+      fs.closeSync(fs.openSync(this.dbFile, 'w'));
+      // Initialize schema
+      await this._initializeDb(await this.getConnection());
+    }
   }
 
   async _initializeDb(db) {
@@ -53,7 +64,7 @@ class DatabaseService extends EventEmitter {
   async getConnection() {
     // Reuse existing connection if available
     if (this._db) return this._db;
-    
+    await this.ensureDatabaseExists();
     // Create new connection
     this._db = new sqlite3.Database(
       this.dbFile,

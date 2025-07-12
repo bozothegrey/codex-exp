@@ -103,7 +103,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
         // Insert default users if requested and none exist
         if (insertDefaultUsers) {
             const defaultUsers = [
-                { username: 'emanuele', password: 'ghisa' },
+                { username: 'ema', password: 'ghisa' },
                 { username: 'SBP', password: 'ghisa' },
                 { username: 'dino', password: 'ghisa' }
             ];
