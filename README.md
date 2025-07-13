@@ -71,10 +71,10 @@ gcloud run deploy boga `
   --allow-unauthenticated `
   --timeout 300s `
   --add-volume "name=gcsvolume,type=cloud-storage,bucket=$env:GCS_BUCKET_NAME" `
-  --add-volume-mount "volume=gcsvolume,mount-path=$env:GCP_MNT_PATH" `
+  --add-volume-mount "volume=gcsvolume,mount-path=$env:GCS_MNT_PATH" `
   --set-env-vars "SESSION_SECRET=$env:SESSION_SECRET" `
   --set-env-vars "NODE_ENV=$env:NODE_ENV" `
-  --set-env-vars "DB_PATH=$env:DB_PATH" `
+  --set-env-vars "DB_PATH=$env:DB_PATH"
 ```
 
 
