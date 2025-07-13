@@ -15,20 +15,24 @@ RUN mkdir -p /mnt/gcs && chown nodejs:nodejs /mnt/gcs
 # Copy package files first for better caching
 COPY package*.json ./
 
+# Set the home directory for the nodejs user to the app directory.
+# This prevents npm from trying to write to a non-existent home dir like /nonexistent
+ENV HOME=/app
+
+# Give the new user ownership of the app directory
+RUN chown -R nodejs:nodejs /app
+
 # Run npm install as the non-root user 'nodejs'
 # This ensures native modules are built for the user that will run the app
 USER nodejs
 RUN npm install
 
 # Copy application files after dependencies are installed
-# This is crucial for multi-stage builds or when using .dockerignore
+# The --chown flag ensures the new files are also owned by the nodejs user
 COPY --chown=nodejs:nodejs . .
 
 # Expose the port (Cloud Run will automatically detect this)
 EXPOSE 3000
-
-# Set the user again for running the application
-USER nodejs
 
 # Start your application
 CMD ["node", "server.js"]
