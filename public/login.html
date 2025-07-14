@@ -8,16 +8,16 @@
 </head>
 <body>
   <div class="container">
-    <b>Login</b><br><br>
+    <h2>Login</h2>
     <form id="loginForm" action="/api/login" method="POST">
       <table>
         <tbody>
           <tr>
-            <td>username:</td>
+            <td><label for="username">username:</label></td>
             <td><input id="username" type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off" autofocus="true"></td>
           </tr>
           <tr>
-            <td>password:</td>
+            <td><label for="password">password:</label></td>
             <td><input id="password" type="password" name="password" size="20"></td>
           </tr>
         </tbody>
@@ -25,26 +25,29 @@
       <br>
       <input type="submit" value="login">
     </form>
-    <a href="#">Forgot your password?</a><br><br>
+    <p id="loginMessage" class="message"></p>
+    <p><a href="forgot-password.html">Forgot your password?</a></p>
 
-    <b>Create Account</b><br><br>
+    <hr style="margin: 20px 0;">
+
+    <h2>Create Account</h2>
     <form id="signupForm" action="/api/register" method="POST">
       <table>
         <tbody>
           <tr>
-            <td>username:</td>
-            <td><input type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off"></td>
+            <td><label for="signupUsername">username:</label></td>
+            <td><input id="signupUsername" type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off" required></td>
           </tr>
           <tr>
-            <td>password:</td>
-            <td><input type="password" name="password" size="20"></td>
+            <td><label for="signupPassword">password:</label></td>
+            <td><input id="signupPassword" type="password" name="password" size="20" required></td>
           </tr>
         </tbody>
       </table>
       <br>
       <input type="submit" value="create account">
     </form>
-    <p id="error" style="color:red"></p>
+    <p id="signupMessage" class="message"></p>
   </div>
   <script src="login.js"></script>
 </body>

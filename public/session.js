@@ -41,7 +41,7 @@ async function loadSession() {
     const list = document.getElementById('setList');
     list.innerHTML = '';
     if (!data.sets || data.sets.length === 0) {
-      list.innerHTML = '<li>No sets logged for this session</li>';
+      list.innerHTML = '<li>Enter your first set for this session</li>';
       return;
     }
 
@@ -75,6 +75,11 @@ async function loadSession() {
 }
 
 if (sessionId) {
+  const manageExercisesLink = document.querySelector('a[href="exercises.html"]');
+  if (manageExercisesLink) {
+    manageExercisesLink.href = `exercises.html?sessionId=${sessionId}`;
+  }
+
   loadExercises();
   loadSession();
   

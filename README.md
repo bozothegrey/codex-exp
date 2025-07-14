@@ -31,8 +31,9 @@ Import .env.prod
 
 Build and run with Docker:
 ```bash
-docker build -t boga . `
+docker build -t boga .
 ```
+### Local deployment
 ```bash
 docker run -d -p 3000:3000 `
   -e SESSION_SECRET=$env:SESSION_SECRET `

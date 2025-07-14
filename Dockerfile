@@ -22,6 +22,9 @@ ENV HOME=/app
 # Give the new user ownership of the app directory
 RUN chown -R nodejs:nodejs /app
 
+# Give the new user ownership of db drive
+RUN chown -R nodejs:nodejs /mnt/gcs
+
 # Run npm install as the non-root user 'nodejs'
 # This ensures native modules are built for the user that will run the app
 USER nodejs

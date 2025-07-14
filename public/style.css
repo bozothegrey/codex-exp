@@ -151,11 +151,14 @@ th, td {
   .swipe-container {
     display: flex;
     width: 100vw;
-    overflow: hidden;
+    overflow: auto;
     position: relative;
     height: 100vh; /* or suitable height */
     transition: transform 0.3s cubic-bezier(.4,2,.6,1);
+     scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
   }
+
   .left-column, .right-column {
     flex: 0 0 100vw;
     width: 100vw;
@@ -165,12 +168,8 @@ th, td {
     overflow-y: auto;
     box-sizing: border-box;
   }
-  .swipe-container.show-left {
-    transform: translateX(0);
-  }
-  .swipe-container.show-right {
-    transform: translateX(-100vw);
-  }
+
+
 }
 
 .nav-link {
@@ -237,4 +236,24 @@ th, td {
 }
 .terminate-action {
   color: #b00;
+}
+
+.message {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 4px;
+  display: none; /* Hide by default */
+}
+
+.message:not(:empty) {
+  display: block; /* Show when it has content */
+}
+
+.error {
+  color: #b00;
+  background-color: #f8d7da;
+}
+.success {
+  color: #1ca21c;
+  background-color: #d4edda;
 }

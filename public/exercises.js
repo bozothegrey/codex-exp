@@ -2,6 +2,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   const exerciseTable = document.getElementById('exerciseTable').querySelector('tbody');
   const addForm = document.getElementById('addExerciseForm');
   const errorEl = document.getElementById('error');
+  const navLinksContainer = document.getElementById('nav-links');
+
+  // Check for sessionId to add a "Back to Session" link
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('sessionId');
+
+  if (sessionId) {
+    const backLink = document.createElement('a');
+    backLink.href = `session.html?id=${sessionId}`;
+    backLink.textContent = 'Back to Session';
+    backLink.className = 'session-action';
+    navLinksContainer.appendChild(backLink);
+  }
+
+  const homeLink = document.createElement('a');
+  homeLink.href = 'index.html';
+  homeLink.textContent = 'Back to Home';
+  homeLink.className = 'session-action';
+  navLinksContainer.appendChild(homeLink);
 
   // Load and display exercises
   async function loadExercises() {
