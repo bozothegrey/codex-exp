@@ -908,6 +908,7 @@ if (require.main === module) {
   initializeDatabase(dbService, true, true).then(() => {
     const app = createApp({}, dbService);
     app.listen(PORT, () => {
+      setupChallengeJobs(dbService); // Start challenge maintenance jobs
       console.log(`Server listening on port ${PORT}`);
     });
   }).catch(err => {
