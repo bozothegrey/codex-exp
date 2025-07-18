@@ -21,32 +21,37 @@ function setupChallengeJobs(dbService, intervalMs = 60 * 1000) {
       `SELECT * FROM challenges WHERE status = 'open'`
     );
     for (const challenge of openChallenges) {
-      // For now, challenged_activity_id is always a set
-      const challengedActivityArr = await dbService.query('SELECT * FROM sets WHERE id = ?', [challenge.challenged_activity_id]);
-      if (!challengedActivityArr.length) continue;
-      const activity = challengedActivityArr[0];
-      // Find certified activities for the same user (challenged_user_id) that were logged after the challenged set
-      const certifiedActs = await dbService.query(
-        `SELECT c.*, s.*, c.activity_type as cert_activity_type FROM certifications c JOIN sets s ON c.activity_id = s.id WHERE c.certifier_id = ? AND c.activity_type = 'set' AND s.created_at > (
-          SELECT created_at FROM sets WHERE id = ?
-        )`,
-        [challenge.challenged_user_id, challenge.challenged_activity_id]
+      // Step 1: Get the original activity and the set it refers to.
+      const originalActivity = await dbService.query('SELECT * FROM user_activities WHERE id = ?', [challenge.challenged_activity_id]);
+      if (!originalActivity.length) continue;
+      
+      const originalActivityData = JSON.parse(originalActivity[0].data);
+      // The activity must be a 'set_logged' type to have a setId
+      if (originalActivity[0].type !== 'set_logged' || !originalActivityData.setId) continue;
+
+      const originalSetArr = await dbService.query('SELECT * FROM sets WHERE id = ?', [originalActivityData.setId]);
+      if (!originalSetArr.length) continue;
+      const oldSet = originalSetArr[0];
+
+      // Step 2: Find newer, certified activities PERFORMED BY the challenged user.
+      // We need to join certifications -> user_activities -> sets
+      const certifiedNewerSets = await dbService.query(
+        `SELECT s.*, ua.id as activity_id
+         FROM certifications c
+         JOIN user_activities ua ON c.activity_id = ua.id
+         JOIN sets s ON JSON_EXTRACT(ua.data, '$.setId') = s.id
+         WHERE ua.user_id = ? AND ua.type = 'set_logged' AND s.created_at > ?`,
+        [challenge.challenged_user_id, oldSet.created_at]
       );
-      for (const certAct of certifiedActs) {
-        let isSuperior = false;
-        // Only handle 'set' type for now
-        if ((activity.type || 'set') === 'set' && (certAct.cert_activity_type || 'set') === 'set') {
-          isSuperior = isSetSuperior(certAct, activity);
-        } else {
-          // Placeholder: add more type resolvers here as needed
-          // e.g., if (activity.type === 'run') isSuperior = isRunSuperior(certAct, activity);
-        }
-        if (isSuperior) {
+
+      for (const newSet of certifiedNewerSets) {
+        if (isSetSuperior(newSet, oldSet)) {
+          // Found a superior performance, resolve the challenge
           await dbService.run(
             `UPDATE challenges SET status = 'closed', closed_at = CURRENT_TIMESTAMP, resolution_reason = 'resolved_by_superior', resolving_activity_id = ? WHERE id = ?`,
-            [certAct.id, challenge.id]
+            [newSet.activity_id, challenge.id] // Use the user_activity_id for resolution tracking
           );
-          break;
+          break; // Move to the next challenge
         }
       }
     }
