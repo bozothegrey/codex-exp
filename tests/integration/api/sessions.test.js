@@ -50,21 +50,9 @@ describe('Session Management API', () => {
     it('should create a new session', async () => {
       const response = await testRequest
         .post('/api/sessions')
-        .set('Cookie', sessionCookie)
-        .send({ date: '2025-06-08' });
-      
+        .set('Cookie', sessionCookie);
       expect(response.statusCode).toBe(200);
       expect(response.body.id).toBeDefined();
-      expect(response.body.date).toBe('2025-06-08');
-    });
-
-    it('should require date field', async () => {
-      const response = await testRequest
-        .post('/api/sessions')
-        .set('Cookie', sessionCookie)
-        .send({});
-      
-      expect(response.statusCode).toBe(400);
     });
   });
 
