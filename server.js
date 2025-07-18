@@ -736,7 +736,7 @@ app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
     return res.status(400).json({ error: 'Activity already challenged' });
   }
   await dbService.run(
-    `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES (?, ?, ?, 'open', ?)`,
+    `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES (?, ?, ?, 'open', COALESCE(?, datetime('now', '+14 days')))`,
     [challenged_user_id, challenger_user_id, challenged_activity_id, expires_at || null]
   );
   res.json({ success: true });
