@@ -19,16 +19,7 @@ class DatabaseService extends EventEmitter {
     this._initialized = false;
   }
 
-  async ensureDatabaseExists() {
-    const fs = require('fs');
-    if (!fs.existsSync(this.dbFile)) {
-      console.log('Initializing new database file at', this.dbFile);
-      // Create empty file if it doesn't exist
-      fs.closeSync(fs.openSync(this.dbFile, 'w'));
-      // Initialize schema
-      await this._initializeDb(await this.getConnection());
-    }
-  }
+  
 
   async _initializeDb(db) {
     if (this._initialized) return;
@@ -64,15 +55,17 @@ class DatabaseService extends EventEmitter {
   async getConnection() {
     // Reuse existing connection if available
     if (this._db) return this._db;
-    await this.ensureDatabaseExists();
+    
     // Create new connection
     this._db = new sqlite3.Database(
       this.dbFile,
       this.dbFile.startsWith('file:') ? { uri: true } : undefined
     );
     
-    // Initialize database
+    /// Initialize the database schema, but only if it hasn't been done before.
+    // The _initialized flag prevents this from ever running twice.
     await this._initializeDb(this._db);
+    
     return this._db;
   }
 

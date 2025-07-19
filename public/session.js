@@ -2,6 +2,11 @@ const params = new URLSearchParams(window.location.search);
 const sessionId = params.get('id');
 const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
 let allExercises = [];
+let lastSet = {
+  exerciseName: '',
+  reps: '',
+  weight: ''
+};
 
 async function loadExercises() {
   const res = await fetch('/api/exercises');
@@ -13,6 +18,32 @@ async function loadExercises() {
     option.value = ex.name;
     datalist.appendChild(option);
   });
+}
+
+async function loadLocations() {
+  try {
+    const response = await fetch('/api/locations');
+    if (!response.ok) throw new Error('Failed to load locations');
+    const locations = await response.json();
+    const select = document.getElementById('locationSelect');
+    
+    // Clear existing options except the default
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+    
+    // Add new options
+    locations.forEach(location => {
+      if (location.id !== 0) { // Skip default as it's already there
+        const option = document.createElement('option');
+        option.value = location.id;
+        option.textContent = location.name;
+        select.appendChild(option);
+      }
+    });
+  } catch (err) {
+    console.error('Error loading locations:', err);
+  }
 }
 
 async function loadSession() {
@@ -36,7 +67,9 @@ async function loadSession() {
       console.error('Empty session data received');
       return;
     }
-    document.getElementById('sessionTitle').textContent = `Session started at ${new Date(data.start_time).toLocaleString()}`;
+    const locationText = data.location_name ? ` at ${data.location_name}` : '';
+    document.getElementById('sessionTitle').textContent = 
+      `Session${locationText} started at ${new Date(data.start_time).toLocaleString()}`;
 
     const list = document.getElementById('setList');
     list.innerHTML = '';
@@ -69,6 +102,11 @@ async function loadSession() {
       document.getElementById('setForm').style.display = 'none';
       document.getElementById('closeButton').style.display = 'none';
     }
+
+    // Prefill the form with last set's data
+    document.getElementById('setExerciseName').value = lastSet.exerciseName;
+    document.getElementById('setReps').value = lastSet.reps;
+    document.getElementById('setWeight').value = lastSet.weight;
   } catch (error) {
     console.error('Error loading session:', error);
   }
@@ -96,6 +134,12 @@ if (sessionId) {
         option.value = ex.name;
         datalist.appendChild(option);
       });
+
+    // If user changes exercise, clear reps/weight if different from last set
+    if (exerciseInput.value !== lastSet.exerciseName) {
+      document.getElementById('setReps').value = '';
+      document.getElementById('setWeight').value = '';
+    }
   });
 }
 
@@ -109,18 +153,50 @@ if (setForm) {
       alert('Please select a valid exercise from the list');
       return;
     }
-    const reps = document.getElementById('setReps').value;
-    const weight = document.getElementById('setWeight').value;
-    await fetch(`/api/sessions/${sessionId}/sets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        exercise_id: selectedExercise.id, 
-        reps, 
-        weight 
-      })
-    });
-    loadSession();
+
+    // Convert values to numbers
+    const reps = parseInt(document.getElementById('setReps').value, 10);
+    const weight = parseFloat(document.getElementById('setWeight').value);
+
+    // Basic validation
+    if (isNaN(reps) || reps <= 0) {
+      alert('Please enter a valid number of reps.');
+      return;
+    }
+    if (isNaN(weight) || weight < 0) {
+      alert('Please enter a valid weight.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exercise_id: selectedExercise.id,
+          reps,
+          weight
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add set');
+      }
+
+      // Store the successful set's data
+      lastSet.exerciseName = selectedExercise.name;
+      lastSet.reps = reps;
+      lastSet.weight = weight;
+
+      // Clear only the exercise input (keep reps/weight for same exercise)
+      exerciseInput.value = '';
+      loadSession();
+
+    } catch (error) {
+      console.error('Error adding set:', error);
+      alert(`Error: ${error.message}`);
+    }
   });
 }
 

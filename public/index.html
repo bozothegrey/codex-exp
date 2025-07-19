@@ -20,12 +20,31 @@
     <div class="swipe-container" id="swipeContainer">
       <div class="left-column" id="leftColumn">
         <form id="sessionForm">
-        <button type="submit">Start Session</button>
+          <div class="location-selector">
+            <label for="locationSelect">Select location</label>
+            <select id="locationSelect">
+              <option value="0">-- No Location --</option>
+            </select>
+            <a href="#" id="manageLocationsLink" class="session-action">Manage Locations</a>
+          </div>
+          <button type="submit">Start Session</button>
         </form>
+        
+        <div id="locationsModal" class="modal" style="display:none">
+          <div class="modal-content">
+            <h3>Manage Locations</h3>
+            <form id="addLocationForm">
+              <input type="text" id="locationNameInput" placeholder="New location name">
+              <button type="submit">Add Location</button>
+            </form>
+            <ul id="locationsList"></ul>
+          </div>
+        </div>
         <table id="sessionsTable">
           <thead>
             <tr>
               <th>Start Time</th>
+              <th>Location</th>
               <th>Duration</th>
               <th>Status</th>
               <th>Actions</th>

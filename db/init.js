@@ -13,8 +13,24 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             admin INTEGER DEFAULT 0
         )`);
 
-        //TODO: location table    
-        //TODO: populate LOCATION
+        // Create locations table
+        await dbService.run(`CREATE TABLE IF NOT EXISTS locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            UNIQUE(name) ON CONFLICT FAIL
+        )`);
+
+        // Check if default location exists before inserting
+        const result = await dbService.run(
+          `INSERT OR IGNORE INTO locations (id, name) VALUES (0, 'undisclosed')`
+        );
+
+        if (result.changes > 0) {
+            console.log('Default location <undisclosed> was inserted successfully.');
+        } else {
+            console.log('Default location <undisclosed> already exists. No changes made.');
+        }
+        
         await dbService.run(`CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -22,8 +38,49 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             end_time TIMESTAMP,
             location_id INTEGER DEFAULT 0,
             closed INTEGER DEFAULT 0,
-            FOREIGN KEY(user_id) REFERENCES users(id)
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(location_id) REFERENCES locations(id)
         )`);
+
+        // Migration: Add location_id column to existing sessions if needed
+        try {
+            const columns = await dbService.query(`PRAGMA table_info(sessions)`);
+            const hasLocationId = columns.some(col => col.name === 'location_id');
+            
+            if (!hasLocationId) {
+                // Add column with default value 0
+                await dbService.run(`ALTER TABLE sessions ADD COLUMN location_id INTEGER DEFAULT 1`);
+                
+                // Ensure foreign key constraint
+                await dbService.run(`
+                    CREATE TABLE sessions_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        end_time TIMESTAMP,
+                        location_id INTEGER DEFAULT 0,
+                        closed INTEGER DEFAULT 0,
+                        FOREIGN KEY(user_id) REFERENCES users(id),
+                        FOREIGN KEY(location_id) REFERENCES locations(id)
+                    )
+                `);
+                
+                // Copy data to new table
+                await dbService.run(`
+                    INSERT INTO sessions_new 
+                    SELECT id, user_id, start_time, end_time, 0 as location_id, closed 
+                    FROM sessions
+                `);
+                
+                // Replace old table with new one
+                await dbService.run(`DROP TABLE sessions`);
+                await dbService.run(`ALTER TABLE sessions_new RENAME TO sessions`);
+            }
+        } catch (err) {
+            console.error('Location migration failed:', err);
+        }
+
+        
                 
         // New global exercises table
         await dbService.run(`CREATE TABLE IF NOT EXISTS exercises (
@@ -167,7 +224,7 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
                 }
             }
         }
-        // TODO: import list of exercises from file
+        // import list of exercises from file
         if (insertDefaultExercises) {
             const exercisesPath = path.join(__dirname, 'exercises.json');
             if (fs.existsSync(exercisesPath)) {

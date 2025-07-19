@@ -194,7 +194,11 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   app.get('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
       const sessions = await dbService.query(
-        'SELECT * FROM sessions WHERE user_id = ? ORDER BY start_time DESC',
+        `SELECT s.*, l.name as location_name 
+         FROM sessions s
+         LEFT JOIN locations l ON s.location_id = l.id
+         WHERE s.user_id = ? 
+         ORDER BY start_time DESC`,
         [req.session.userId]
       );
       res.json(sessions);
@@ -205,11 +209,18 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
   app.post('/api/sessions', ensureLoggedIn, async (req, res) => {
     try {
+      const { location_id } = req.body;
       const { lastID } = await dbService.run(
-        'INSERT INTO sessions (user_id) VALUES (?)',
-        [req.session.userId]
+        'INSERT INTO sessions (user_id, location_id) VALUES (?, ?)',
+        [req.session.userId, location_id || 0]
       );
-      const newSession = await dbService.query('SELECT * FROM sessions WHERE id = ?', [lastID]);
+      const newSession = await dbService.query(
+        `SELECT s.*, l.name as location_name 
+         FROM sessions s
+         LEFT JOIN locations l ON s.location_id = l.id
+         WHERE s.id = ?`, 
+        [lastID]
+      );
       const session = newSession[0];
       
       console.log(`Created session ${session.id} for user ${req.session.userId}`);
@@ -247,10 +258,13 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       }
 
       const result = await dbService.transaction(async () => {
-        const session = await dbService.query(
-          'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
-          [sessionId, userId]
-        );
+      const session = await dbService.query(
+        `SELECT s.*, l.name as location_name 
+         FROM sessions s
+         LEFT JOIN locations l ON s.location_id = l.id
+         WHERE s.id = ? AND s.user_id = ?`,
+        [sessionId, userId]
+      );
         
         if (session.length === 0) {
           return { changes: 0 };
@@ -298,7 +312,10 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
       const userId = req.session.userId;
 
       const sessionRows = await dbService.query(
-        'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+        `SELECT s.*, l.name as location_name 
+         FROM sessions s
+         LEFT JOIN locations l ON s.location_id = l.id
+         WHERE s.id = ? AND s.user_id = ?`,
         [id, userId]
       );
       
@@ -485,7 +502,10 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
       const result = await dbService.transaction(async (db) => {
         const session = await dbService.query(
-          'SELECT * FROM sessions WHERE id = ? AND user_id = ?',
+          `SELECT s.*, l.name as location_name 
+           FROM sessions s
+           LEFT JOIN locations l ON s.location_id = l.id
+           WHERE s.id = ? AND s.user_id = ?`,
           [id, userId]
         );
         
@@ -699,6 +719,61 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
     } catch (err) {
       console.error('Error fetching exercises:', err);
       res.status(500).json({ error: 'Failed to fetch exercises' });
+    }
+  });
+
+  // Location management endpoints
+  app.get('/api/locations', ensureLoggedIn, async (req, res) => {
+    try {
+      const locations = await dbService.query('SELECT * FROM locations');
+      res.json(locations);
+    } catch (err) {
+      console.error('Error fetching locations:', err);
+      res.status(500).json({ error: 'Failed to fetch locations' });
+    }
+  });
+
+  app.post('/api/locations', ensureLoggedIn, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) return res.status(400).json({ error: 'Location name required' });
+      if (name.toLowerCase() === '<undisclosed>') {
+        return res.status(400).json({ error: 'Cannot create location with reserved name' });
+      }
+      
+      const result = await dbService.run(
+        'INSERT INTO locations (name) VALUES (?)',
+        [name]
+      );
+      res.status(201).json({ id: result.lastID, name });
+    } catch (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        res.status(409).json({ error: 'Location name already exists' });
+      } else {
+        console.error('Error creating location:', err);
+        res.status(500).json({ error: 'Failed to create location' });
+      }
+    }
+  });
+
+  app.delete('/api/locations/:id', ensureLoggedIn, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (id === 0) return res.status(400).json({ error: 'Cannot delete default location' });
+
+      const result = await dbService.run(
+        'DELETE FROM locations WHERE id = ?',
+        [id]
+      );
+      
+      if (result.changes === 0) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+      
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error deleting location:', err);
+      res.status(500).json({ error: 'Failed to delete location' });
     }
   });
 
