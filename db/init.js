@@ -38,9 +38,58 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             exercise_id INTEGER NOT NULL,
             reps INTEGER NOT NULL,
             weight REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
             FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
         )`);
+
+        // Migration: Check if created_at column exists first
+        try {
+            const columns = await dbService.query(`PRAGMA table_info(sets)`);
+            const hasCreatedAt = columns.some(col => col.name === 'created_at');
+            
+            if (!hasCreatedAt) {
+                // First add column without default
+                await dbService.run(`ALTER TABLE sets ADD COLUMN created_at TIMESTAMP`);
+                
+                // Backfill existing sets with session start_time
+                await dbService.run(`
+                    UPDATE sets 
+                    SET created_at = (
+                        SELECT start_time 
+                        FROM sessions 
+                        WHERE sessions.id = sets.session_id
+                    )
+                `);
+                
+                // Add default constraint for new rows
+                await dbService.run(`
+                    CREATE TABLE sets_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id INTEGER NOT NULL,
+                        exercise_id INTEGER NOT NULL,
+                        reps INTEGER NOT NULL,
+                        weight REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
+                        FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                    )
+                `);
+                
+                // Copy data to new table
+                await dbService.run(`
+                    INSERT INTO sets_new 
+                    SELECT id, session_id, exercise_id, reps, weight, created_at 
+                    FROM sets
+                `);
+                
+                // Replace old table with new one
+                await dbService.run(`DROP TABLE sets`);
+                await dbService.run(`ALTER TABLE sets_new RENAME TO sets`);
+            }
+        } catch (err) {
+            console.error('Migration failed:', err);
+        }
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS follows (
             follower_id INTEGER NOT NULL,

@@ -1,6 +1,8 @@
-gym.db
-test.db
 
+# Database files
+*.db
+
+# Cloud and containers
 .gcloud
 
 # Dependencies
@@ -29,3 +31,4 @@ Thumbs.db
 # AI
 AGENTS.md
 .github/prompts/
+

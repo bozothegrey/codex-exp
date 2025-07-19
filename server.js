@@ -388,7 +388,7 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
       // Create set
       const result = await dbService.run(
-        'INSERT INTO sets (exercise_id, session_id, reps, weight) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sets (exercise_id, session_id, reps, weight, created_at) VALUES (?, ?, ?, ?, strftime(\'%Y-%m-%d %H:%M:%f\', \'now\'))',
         [exercise_id, sessionId, reps, weight || null]
       );
 
@@ -734,6 +734,17 @@ app.post('/api/challenges', ensureLoggedIn, async (req, res) => {
   const existing = await dbService.query('SELECT 1 FROM challenges WHERE challenged_activity_id = ? AND status = "open"', [challenged_activity_id]);
   if (existing.length > 0) {
     return res.status(400).json({ error: 'Activity already challenged' });
+  }
+  // Check if activity was part of a previously resolved challenge
+  const previouslyResolved = await dbService.query(
+    `SELECT 1 FROM challenges 
+     WHERE challenged_activity_id = ? 
+     AND status = 'closed'
+     AND resolution_reason IN ('resolved_by_superior', 'certified')`,
+    [challenged_activity_id]
+  );
+  if (previouslyResolved.length > 0) {
+    return res.status(400).json({ error: 'This activity has already been successfully resolved and cannot be challenged again' });
   }
   await dbService.run(
     `INSERT INTO challenges (challenged_user_id, challenger_user_id, challenged_activity_id, status, expires_at) VALUES (?, ?, ?, 'open', COALESCE(?, datetime('now', '+14 days')))`,
