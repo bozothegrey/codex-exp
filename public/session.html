@@ -13,8 +13,8 @@
     <form id="setForm">
       <input type="text" id="setExerciseName" placeholder="Exercise name" required autocomplete="off" list="exerciseSuggestions">
       <datalist id="exerciseSuggestions"></datalist>
-      <input type="number" id="setReps" placeholder="Reps" required>
-      <input type="number" id="setWeight" placeholder="Weight (kg)" required>
+      <input type="number" id="setReps" placeholder="Reps" min="1" step="1" required>
+      <input type="number" id="setWeight" placeholder="Weight (kg)" min="0" step="any" required>
       <button type="submit">Add Set</button>
     </form>
     <div class="session-actions">

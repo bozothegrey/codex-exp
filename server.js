@@ -365,11 +365,21 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
   // Endpoint matching frontend expectation
   app.post('/api/sessions/:id/sets', ensureLoggedIn, async (req, res) => {
     try {
-      const sessionId = req.params.id;
+      const sessionId = parseInt(req.params.id, 10);
       const { exercise_id, reps, weight } = req.body;
       
-      if (!exercise_id || !reps) {
-        return res.status(400).json({ error: 'exercise_id and reps required' });
+      if (isNaN(sessionId)) {
+        return res.status(400).json({ error: 'Invalid session ID' });
+      }
+
+      if (!exercise_id || reps === undefined) {
+        return res.status(400).json({ error: 'exercise_id and reps are required' });
+      }
+      if (typeof reps !== 'number' || !Number.isInteger(reps) || reps <= 0) {
+        return res.status(400).json({ error: 'Reps must be a positive integer.' });
+      }
+      if (weight !== undefined && weight !== null && (typeof weight !== 'number' || weight < 0)) {
+        return res.status(400).json({ error: 'Weight must be a non-negative number.' });
       }
       //Retrieve exercise name and hrow error if exercise does not exist
       const exercise = await dbService.query('SELECT * FROM exercises WHERE id = ?', [exercise_id]);
