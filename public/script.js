@@ -594,6 +594,20 @@ function setupLocationManagement() {
 }
 
 window.onload = async () => {
+    // Redirect to login if not authenticated (except on login and signup pages)
+    if (!window.location.pathname.endsWith('login.html') && !window.location.pathname.endsWith('signup.html')) {
+        try {
+            const res = await fetch('/api/me');
+            if (res.status === 401) {
+                window.location.href = 'login.html';
+                return;
+            }
+        } catch (e) {
+            // On network error, also redirect to login
+            window.location.href = 'login.html';
+            return;
+        }
+    }
     await updateAuthLinks();
     await loadLocations();
     fetchSessions();

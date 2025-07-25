@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Create Account</h1>
+    <form id="signupForm" action="/api/register" method="POST">
+      <table>
+        <tbody>
+          <tr>
+            <td><label for="signupUsername">username:</label></td>
+            <td><input id="signupUsername" type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off" required autofocus="true"></td>
+          </tr>
+          <tr>
+            <td><label for="signupPassword">password:</label></td>
+            <td><input id="signupPassword" type="password" name="password" size="20" required></td>
+          </tr>
+        </tbody>
+      </table>
+      <br>
+      <input type="submit" value="create account">
+    </form>
+    <p id="signupMessage" class="message"></p>
+    <p>Already have an account? <a href="login.html">Login here</a></p>
+  </div>
+  <script src="signup.js"></script>
+</body>
+</html> 
