@@ -319,13 +319,31 @@ async function fetchNotifications() {
           const formattedDate = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
           msg = `Session started by ${data.username} at ${formattedDate}`;
           li.appendChild(document.createTextNode(msg));
-        } else if (n.type === 'session_ended') {
+        } else if (n.type === 'personal_record') {
           const data = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+          li.className = 'pr-notification';
           const date = new Date(n.created_at);
           const formattedDate = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-          const durationMinutes = Math.floor((data.duration || 0) / 60000);
-          msg = `Session ended by ${data.username} at ${formattedDate} (Duration: ${durationMinutes}m)`;
-          li.appendChild(document.createTextNode(msg));
+          
+          const container = document.createElement('div');
+          container.className = 'pr-container';
+          
+          const icon = document.createElement('span');
+          icon.className = 'pr-icon';
+          icon.textContent = '🏆';
+          
+          const content = document.createElement('div');
+          content.className = 'pr-content';
+          content.innerHTML = `
+            <strong>New Personal Record!</strong><br>
+            ${data.username} achieved ${data.weight}kg x ${data.reps} reps in ${data.exercise_name}<br>
+            1RM: ${data.oneRM.toFixed(2)}kg (Epley formula)<br>
+            <small>${formattedDate}</small>
+          `;
+          
+          container.appendChild(icon);
+          container.appendChild(content);
+          li.appendChild(container);
         } else {
           msg = n.message || n.type;
           li.appendChild(document.createTextNode(msg));
