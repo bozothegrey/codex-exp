@@ -8,7 +8,7 @@
 </head>
 <body>
   <div class="container">
-    <h2>Login</h2>
+    <h1>Login</h1>
     <form id="loginForm" action="/api/login" method="POST">
       <table>
         <tbody>
@@ -27,27 +27,7 @@
     </form>
     <p id="loginMessage" class="message"></p>
     <p><a href="forgot-password.html">Forgot your password?</a></p>
-
-    <hr style="margin: 20px 0;">
-
-    <h2>Create Account</h2>
-    <form id="signupForm" action="/api/register" method="POST">
-      <table>
-        <tbody>
-          <tr>
-            <td><label for="signupUsername">username:</label></td>
-            <td><input id="signupUsername" type="text" name="username" size="20" autocorrect="off" spellcheck="false" autocapitalize="off" required></td>
-          </tr>
-          <tr>
-            <td><label for="signupPassword">password:</label></td>
-            <td><input id="signupPassword" type="password" name="password" size="20" required></td>
-          </tr>
-        </tbody>
-      </table>
-      <br>
-      <input type="submit" value="create account">
-    </form>
-    <p id="signupMessage" class="message"></p>
+    <p>Don't have an account? <a href="signup.html">Sign up here</a></p>
   </div>
   <script src="login.js"></script>
 </body>
