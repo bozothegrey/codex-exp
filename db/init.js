@@ -206,6 +206,25 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             FOREIGN KEY (resolving_activity_id) REFERENCES user_activities(id) ON DELETE CASCADE
         )`);
 
+        // Groups functionality
+        await dbService.run(`CREATE TABLE IF NOT EXISTS groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            owner_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
+        await dbService.run(`CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`);
+
         // Insert default users if requested and none exist
         if (insertDefaultUsers) {
             const defaultUsers = [

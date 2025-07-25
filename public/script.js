@@ -582,6 +582,189 @@ function setupLocationManagement() {
   });
 }
 
+// Groups functionality
+async function fetchGroups() {
+  try {
+    const res = await fetch('/api/groups');
+    if (!res.ok) {
+      console.error('Failed to fetch groups');
+      return;
+    }
+    const groups = await res.json();
+    const groupsList = document.getElementById('groupsList');
+    groupsList.innerHTML = '';
+    
+    groups.forEach(group => {
+      const li = document.createElement('li');
+      const memberStatus = group.is_member ? ' (Member)' : '';
+      const ownerStatus = group.is_owner ? ' (Owner)' : '';
+      const status = group.is_owner ? ownerStatus : (group.is_member ? memberStatus : '');
+      
+      li.innerHTML = `
+        <strong>${group.name}</strong>${status}<br>
+        <small>Owner: ${group.owner_username}</small><br>
+        <small>${group.description || 'No description'}</small><br>
+        <small>Created: ${new Date(group.created_at).toLocaleDateString()}</small>
+      `;
+      
+      // Add action buttons
+      const actionsDiv = document.createElement('div');
+      actionsDiv.style.marginTop = '5px';
+      
+      if (!group.is_member) {
+        const joinBtn = document.createElement('button');
+        joinBtn.textContent = 'Join';
+        joinBtn.className = 'session-action';
+        joinBtn.onclick = () => joinGroup(group.id);
+        actionsDiv.appendChild(joinBtn);
+      } else if (!group.is_owner) {
+        const leaveBtn = document.createElement('button');
+        leaveBtn.textContent = 'Leave';
+        leaveBtn.className = 'session-action';
+        leaveBtn.style.color = 'red';
+        leaveBtn.onclick = () => leaveGroup(group.id);
+        actionsDiv.appendChild(leaveBtn);
+      } else {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.className = 'session-action';
+        deleteBtn.style.color = 'red';
+        deleteBtn.onclick = () => deleteGroup(group.id);
+        actionsDiv.appendChild(deleteBtn);
+      }
+      
+      const viewBtn = document.createElement('button');
+      viewBtn.textContent = 'View Members';
+      viewBtn.className = 'session-action';
+      viewBtn.onclick = () => viewGroupMembers(group.id);
+      actionsDiv.appendChild(viewBtn);
+      
+      li.appendChild(actionsDiv);
+      groupsList.appendChild(li);
+    });
+  } catch (e) {
+    console.error('Error fetching groups:', e);
+  }
+}
+
+async function createGroup() {
+  const name = prompt('Enter group name:');
+  if (!name) return;
+  
+  const description = prompt('Enter group description (optional):');
+  
+  try {
+    const res = await fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description })
+    });
+    
+    if (res.ok) {
+      alert('Group created successfully!');
+      fetchGroups();
+    } else {
+      const data = await res.json();
+      alert('Failed to create group: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.error('Error creating group:', e);
+    alert('Failed to create group');
+  }
+}
+
+async function joinGroup(groupId) {
+  try {
+    const res = await fetch(`/api/groups/${groupId}/join`, {
+      method: 'POST'
+    });
+    
+    if (res.ok) {
+      alert('Joined group successfully!');
+      fetchGroups();
+    } else {
+      const data = await res.json();
+      alert('Failed to join group: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.error('Error joining group:', e);
+    alert('Failed to join group');
+  }
+}
+
+async function leaveGroup(groupId) {
+  if (!confirm('Are you sure you want to leave this group?')) return;
+  
+  try {
+    const res = await fetch(`/api/groups/${groupId}/leave`, {
+      method: 'DELETE'
+    });
+    
+    if (res.ok) {
+      alert('Left group successfully!');
+      fetchGroups();
+    } else {
+      const data = await res.json();
+      alert('Failed to leave group: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.error('Error leaving group:', e);
+    alert('Failed to leave group');
+  }
+}
+
+async function deleteGroup(groupId) {
+  if (!confirm('Are you sure you want to delete this group? This action cannot be undone.')) return;
+  
+  try {
+    const res = await fetch(`/api/groups/${groupId}`, {
+      method: 'DELETE'
+    });
+    
+    if (res.ok) {
+      alert('Group deleted successfully!');
+      fetchGroups();
+    } else {
+      const data = await res.json();
+      alert('Failed to delete group: ' + (data.error || 'Unknown error'));
+    }
+  } catch (e) {
+    console.error('Error deleting group:', e);
+    alert('Failed to delete group');
+  }
+}
+
+async function viewGroupMembers(groupId) {
+  try {
+    const res = await fetch(`/api/groups/${groupId}`);
+    if (!res.ok) {
+      alert('Failed to load group details');
+      return;
+    }
+    
+    const group = await res.json();
+    let membersList = `Group: ${group.name}\n\nMembers:\n`;
+    
+    group.members.forEach(member => {
+      const role = member.is_owner ? ' (Owner)' : '';
+      const joinedDate = new Date(member.joined_at).toLocaleDateString();
+      membersList += `• ${member.username}${role} - Joined: ${joinedDate}\n`;
+    });
+    
+    alert(membersList);
+  } catch (e) {
+    console.error('Error viewing group members:', e);
+    alert('Failed to load group members');
+  }
+}
+
+function setupGroupsManagement() {
+  const createGroupBtn = document.getElementById('createGroupBtn');
+  if (createGroupBtn) {
+    createGroupBtn.addEventListener('click', createGroup);
+  }
+}
+
 window.onload = async () => {
     // Redirect to login if not authenticated (except on login and signup pages)
     if (!window.location.pathname.endsWith('login.html') && !window.location.pathname.endsWith('signup.html')) {
@@ -601,8 +784,10 @@ window.onload = async () => {
     await loadLocations();
     fetchSessions();
     fetchFollowedUsers();
+    fetchGroups();
     startNotificationsPolling();
     setupChallengeFilters();
     setupTerminateButtons();
     setupLocationManagement();
+    setupGroupsManagement(); // Initialize groups management
 };

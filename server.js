@@ -986,6 +986,233 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
     }
   });
 
+  // Groups API endpoints
+  // Create a new group
+  app.post('/api/groups', ensureLoggedIn, async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      const userId = req.session.userId;
+      
+      if (!name) {
+        return res.status(400).json({ error: 'Group name is required' });
+      }
+      
+      // Check if group name already exists
+      const existingGroup = await dbService.query(
+        'SELECT * FROM groups WHERE name = ?',
+        [name]
+      );
+      
+      if (existingGroup.length > 0) {
+        return res.status(400).json({ error: 'Group name already exists' });
+      }
+      
+      // Create the group
+      const result = await dbService.run(
+        'INSERT INTO groups (name, description, owner_id) VALUES (?, ?, ?)',
+        [name, description || null, userId]
+      );
+      
+      // Add the creator as a member
+      await dbService.run(
+        'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+        [result.lastID, userId]
+      );
+      
+      // Get the created group with owner info
+      const group = await dbService.query(
+        `SELECT g.*, u.username as owner_username 
+         FROM groups g 
+         JOIN users u ON g.owner_id = u.id 
+         WHERE g.id = ?`,
+        [result.lastID]
+      );
+      
+      res.status(201).json(group[0]);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // List all groups
+  app.get('/api/groups', ensureLoggedIn, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      
+      const groups = await dbService.query(
+        `SELECT g.*, u.username as owner_username,
+                CASE WHEN gm.user_id IS NOT NULL THEN 1 ELSE 0 END as is_member,
+                CASE WHEN g.owner_id = ? THEN 1 ELSE 0 END as is_owner
+         FROM groups g
+         JOIN users u ON g.owner_id = u.id
+         LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = ?
+         ORDER BY g.created_at DESC`,
+        [userId, userId]
+      );
+      
+      res.json(groups);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Get group details and members
+  app.get('/api/groups/:id', ensureLoggedIn, async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      
+      if (isNaN(groupId)) {
+        return res.status(400).json({ error: 'Invalid group ID' });
+      }
+      
+      // Get group details
+      const group = await dbService.query(
+        `SELECT g.*, u.username as owner_username,
+                CASE WHEN gm.user_id IS NOT NULL THEN 1 ELSE 0 END as is_member,
+                CASE WHEN g.owner_id = ? THEN 1 ELSE 0 END as is_owner
+         FROM groups g
+         JOIN users u ON g.owner_id = u.id
+         LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.user_id = ?
+         WHERE g.id = ?`,
+        [userId, userId, groupId]
+      );
+      
+      if (group.length === 0) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+      
+      // Get group members
+      const members = await dbService.query(
+        `SELECT u.id, u.username, gm.joined_at,
+                CASE WHEN g.owner_id = u.id THEN 1 ELSE 0 END as is_owner
+         FROM group_members gm
+         JOIN users u ON gm.user_id = u.id
+         JOIN groups g ON gm.group_id = g.id
+         WHERE gm.group_id = ?
+         ORDER BY gm.joined_at ASC`,
+        [groupId]
+      );
+      
+      res.json({
+        ...group[0],
+        members
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Join a group
+  app.post('/api/groups/:id/join', ensureLoggedIn, async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      
+      if (isNaN(groupId)) {
+        return res.status(400).json({ error: 'Invalid group ID' });
+      }
+      
+      // Check if group exists
+      const group = await dbService.query(
+        'SELECT * FROM groups WHERE id = ?',
+        [groupId]
+      );
+      
+      if (group.length === 0) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+      
+      // Check if user is already a member
+      const existingMember = await dbService.query(
+        'SELECT * FROM group_members WHERE group_id = ? AND user_id = ?',
+        [groupId, userId]
+      );
+      
+      if (existingMember.length > 0) {
+        return res.status(400).json({ error: 'Already a member of this group' });
+      }
+      
+      // Add user to group
+      await dbService.run(
+        'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+        [groupId, userId]
+      );
+      
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Leave a group
+  app.delete('/api/groups/:id/leave', ensureLoggedIn, async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      
+      if (isNaN(groupId)) {
+        return res.status(400).json({ error: 'Invalid group ID' });
+      }
+      
+      // Check if user is the owner
+      const group = await dbService.query(
+        'SELECT * FROM groups WHERE id = ? AND owner_id = ?',
+        [groupId, userId]
+      );
+      
+      if (group.length > 0) {
+        return res.status(400).json({ error: 'Group owner cannot leave the group. Transfer ownership or delete the group instead.' });
+      }
+      
+      // Remove user from group
+      const result = await dbService.run(
+        'DELETE FROM group_members WHERE group_id = ? AND user_id = ?',
+        [groupId, userId]
+      );
+      
+      if (result.changes === 0) {
+        return res.status(404).json({ error: 'Not a member of this group' });
+      }
+      
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Delete a group (owner only)
+  app.delete('/api/groups/:id', ensureLoggedIn, async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      
+      if (isNaN(groupId)) {
+        return res.status(400).json({ error: 'Invalid group ID' });
+      }
+      
+      // Check if user is the owner
+      const group = await dbService.query(
+        'SELECT * FROM groups WHERE id = ? AND owner_id = ?',
+        [groupId, userId]
+      );
+      
+      if (group.length === 0) {
+        return res.status(403).json({ error: 'Only group owner can delete the group' });
+      }
+      
+      // Delete the group (cascades to group_members)
+      const result = await dbService.run(
+        'DELETE FROM groups WHERE id = ?',
+        [groupId]
+      );
+      
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // Add 404 handler for undefined routes
   app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });
