@@ -358,10 +358,21 @@ function renderChallengeList(listElem, challenges) {
   challenges.forEach(ch => {
     const li = document.createElement('li');
     li.className = 'challenge-item';
+    
+    const details = ch.activity_details;
+    const detailsHtml = details ? `
+      <div><b>Set to Outclass:</b> 
+        ${details.exercise_name || 'N/A'} - 
+        ${details.reps} reps at ${details.weight}kg
+      </div>
+    ` : `
+      <div><b>Activity:</b> Set #${ch.challenged_activity_id || ch.activity_id || ch.id}</div>
+    `;
+
     li.innerHTML = `
       <div><b>Status:</b> <span class="challenge-status ${ch.status}">${ch.status}</span></div>
       <div><b>Expires:</b> ${ch.expires_at ? new Date(ch.expires_at).toLocaleString() : 'N/A'}</div>
-      <div><b>Activity:</b> Set #${ch.challenged_activity_id || ch.activity_id || ch.id}</div>
+      ${detailsHtml}
     `;
     listElem.appendChild(li);
   });
