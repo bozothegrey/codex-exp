@@ -5,6 +5,15 @@ const bcrypt = require('bcrypt');
 const DatabaseService = require('./db/dbService');
 const { setupChallengeJobs } = require('./db/challengeJobs');
 
+// Admin middleware
+function requireAdminApiKey(req, res, next) {
+  const apiKey = req.get('X-Admin-API-Key');
+  if (!apiKey || apiKey !== process.env.SESSION_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
 const PORT = process.env.PORT || 3000;
 const DB_FILE = process.env.DB_FILE || 'gym.db';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'secret-key';
@@ -1024,6 +1033,21 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
   });
 
   // Add 404 handler for undefined routes
+  // Admin query endpoint
+  app.post('/admin/query', requireAdminApiKey, async (req, res) => {
+    try {
+      const { sql } = req.body;
+      if (!sql) {
+        return res.status(400).json({ error: 'SQL query required' });
+      }
+      const results = await dbService.query(sql);
+      res.json(results);
+    } catch (err) {
+      console.error('Admin query error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });
   });

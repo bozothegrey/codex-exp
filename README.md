@@ -33,6 +33,13 @@ Build and run with Docker:
 ```bash
 docker build -t boga .
 ```
+
+##export vars
+```bash
+Get-Content .\.env.prod | ForEach-Object { $key, $value = $_.Split('=', 2); Set-Item -Path "env:$key" -Value $value }
+```
+
+
 ### Local deployment
 ```bash
 docker run -d -p 3000:3000 `
@@ -52,10 +59,7 @@ docker tag boga "gcr.io/boga-465619/boga:$TAG"
 docker push "gcr.io/boga-465619/boga:$TAG"
 ```
 
-##export vars
-```bash
-Get-Content .\.env.prod | ForEach-Object { $key, $value = $_.Split('=', 2); Set-Item -Path "env:$key" -Value $value }
-```
+
 
 ## Deploy to GCloud run
 ```bash
@@ -66,7 +70,7 @@ gcloud run deploy boga `
   --region europe-west1 `
   --allow-unauthenticated `
   --timeout 300s `
-  --set-env-vars --set-env-vars "SESSION_SECRET=$env:SECRET_KEY,NODE_ENV=$env:NODE_ENV,DB_PATH=$env:DB_PATH"
+  --set-env-vars --set-env-vars "SESSION_SECRET=$env:SESSION_SECRET,NODE_ENV=$env:NODE_ENV,DB_PATH=$env:DB_PATH"
 ```
 ## Deploy with db mount
 ```bash
@@ -79,7 +83,7 @@ gcloud run deploy boga `
   --timeout 300s `
   --add-volume "name=gcsvolume,type=cloud-storage,bucket=boga-db-20250712" `
   --add-volume-mount "volume=gcsvolume,mount-path=/mnt/gcs" `
-  --set-env-vars "SESSION_SECRET=$env:SECRET_KEY,NODE_ENV=$env:NODE_ENV,DB_PATH=$env:DB_PATH"
+  --set-env-vars "SESSION_SECRET=$env:SESSION_SECRET,NODE_ENV=$env:NODE_ENV,DB_PATH=$env:DB_PATH"
 ```
 
 
