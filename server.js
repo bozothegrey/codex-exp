@@ -937,30 +937,16 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
       return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
     }
 
-    let query = `
-      SELECT c.*, ua.data as activity_data
-      FROM challenges c
-      LEFT JOIN user_activities ua ON c.challenged_activity_id = ua.id
-      WHERE c.challenged_user_id = ?
-    `;
+    let query = 'SELECT * FROM challenges WHERE challenged_user_id = ?';
     const params = [userId];
     
     if (status !== 'both') {
-      query += ' AND c.status = ?';
+      query += ' AND status = ?';
       params.push(status);
     }
 
     const challenges = await dbService.query(query, params);
-    
-    const detailedChallenges = challenges.map(ch => {
-      const data = JSON.parse(ch.activity_data || '{}');
-      return {
-        ...ch,
-        activity_details: data
-      };
-    });
-
-    res.json(detailedChallenges);
+    res.json(challenges);
   } catch (err) {
     handleError(res, err);
   }
@@ -968,42 +954,28 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
 
   // List challenges given by a user with status filtering
   app.get('/api/challenges/given', ensureLoggedIn, async (req, res) => {
-  try {
-    const userId = req.session.userId;
-    const { status = 'both' } = req.query;
-    
-    if (!['open', 'closed', 'both'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
+    try {
+      const userId = req.session.userId;
+      const { status = 'both' } = req.query;
+      
+      if (!['open', 'closed', 'both'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status value. Must be "open", "closed", or "both"' });
+      }
+
+      let query = 'SELECT * FROM challenges WHERE challenger_user_id = ?';
+      const params = [userId];
+      
+      if (status !== 'both') {
+        query += ' AND status = ?';
+        params.push(status);
+      }
+
+      const challenges = await dbService.query(query, params);
+      res.json(challenges);
+    } catch (err) {
+      handleError(res, err);
     }
-
-    let query = `
-      SELECT c.*, ua.data as activity_data
-      FROM challenges c
-      LEFT JOIN user_activities ua ON c.challenged_activity_id = ua.id
-      WHERE c.challenger_user_id = ?
-    `;
-    const params = [userId];
-    
-    if (status !== 'both') {
-      query += ' AND c.status = ?';
-      params.push(status);
-    }
-
-    const challenges = await dbService.query(query, params);
-    
-    const detailedChallenges = challenges.map(ch => {
-      const data = JSON.parse(ch.activity_data || '{}');
-      return {
-        ...ch,
-        activity_details: data
-      };
-    });
-
-    res.json(detailedChallenges);
-  } catch (err) {
-    handleError(res, err);
-  }
-});
+  });
 
   // Check if activity has an open challenge
   app.get('/api/challenges/:id', ensureLoggedIn, async (req, res) => {
