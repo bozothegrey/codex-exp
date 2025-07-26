@@ -73,6 +73,13 @@ async function loadSession() {
 
     const list = document.getElementById('setList');
     list.innerHTML = '';
+
+    // Always hide form for closed/readonly sessions first
+    if (readonly || data.closed) {
+      document.getElementById('setForm').style.display = 'none';
+      document.getElementById('closeButton').style.display = 'none';
+    }
+
     if (!data.sets || data.sets.length === 0) {
       list.innerHTML = '<li>Enter your first set for this session</li>';
       return;
@@ -97,11 +104,6 @@ async function loadSession() {
       }
       list.appendChild(li);
     });
-
-    if (readonly || data.closed) {
-      document.getElementById('setForm').style.display = 'none';
-      document.getElementById('closeButton').style.display = 'none';
-    }
 
     // Prefill the form with last set's data
     document.getElementById('setExerciseName').value = lastSet.exerciseName;

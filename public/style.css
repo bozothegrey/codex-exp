@@ -320,3 +320,30 @@ th, td {
   border-radius: 4px;
   cursor: pointer;
 }
+
+/* PR Notification Styles */
+.pr-notification {
+  background-color: #fff8e1;
+  border-left: 4px solid #ffc107;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+.pr-container {
+  display: flex;
+  gap: 10px;
+}
+
+.pr-icon {
+  font-size: 24px;
+}
+
+.pr-content {
+  flex: 1;
+}
+
+.pr-content small {
+  color: #666;
+  font-size: 0.9em;
+}

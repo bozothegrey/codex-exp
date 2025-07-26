@@ -256,4 +256,21 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
     }
 }
 
-module.exports = { initializeDatabase };
+async function clearDatabase(dbService) {
+  try {
+    await dbService.run('PRAGMA foreign_keys = OFF');
+    const tables = await dbService.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';");
+    for (const table of tables) {
+      await dbService.run(`DELETE FROM ${table.name}`);
+    }
+    // Reset autoincrement counters
+    await dbService.run("DELETE FROM sqlite_sequence");
+  } catch (err) {
+    console.error('Failed to clear database:', err);
+    throw err;
+  } finally {
+    await dbService.run('PRAGMA foreign_keys = ON');
+  }
+}
+
+module.exports = { initializeDatabase, clearDatabase };

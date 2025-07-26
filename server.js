@@ -379,11 +379,16 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
 
   // --- SETS ENDPOINT ---
 
-  // Endpoint matching frontend expectation
+  const { calculate1RM } = require('./utils');
+
+// ... (rest of the file)
+
+// Endpoint matching frontend expectation
   app.post('/api/sessions/:id/sets', ensureLoggedIn, async (req, res) => {
     try {
       const sessionId = parseInt(req.params.id, 10);
       const { exercise_id, reps, weight } = req.body;
+      const userId = req.session.userId;
       
       if (isNaN(sessionId)) {
         return res.status(400).json({ error: 'Invalid session ID' });
@@ -418,27 +423,59 @@ app.delete('/api/user', ensureLoggedIn, async (req, res) => {
         'INSERT INTO sets (exercise_id, session_id, reps, weight, created_at) VALUES (?, ?, ?, ?, strftime(\'%Y-%m-%d %H:%M:%f\', \'now\'))',
         [exercise_id, sessionId, reps, weight || null]
       );
+      const setId = result.lastID;
 
-
-
-      // Notify followers
+      // Notify followers about the set
       await notifyFollowers(
         req.session.userId,
         'set_logged',
         { 
-          setId: result.lastID, 
-          exercise_id: exercise_id,
-          exercise_name: exercise_name,
-          session_id: sessionId, 
-          reps, 
+          setId,
+          exercise_id,
+          exercise_name,
+          session_id: sessionId,
+          reps,
           weight,
           username: req.session.username
         }
       );
 
+      // 1RM Calculation and Personal Record Check
+      if (weight > 0 && reps > 0) {
+        const oneRM = calculate1RM(weight, reps);
+
+        // Find previous personal record for this exercise (sorted by 1RM desc)
+        const [topPR] = await dbService.query(
+          `SELECT data FROM user_activities 
+           WHERE user_id = ? AND type = 'personal_record' 
+           AND json_extract(data, '$.exercise_id') = ?
+           ORDER BY json_extract(data, '$.oneRM') DESC
+           LIMIT 1`,
+          [userId, exercise_id]
+        );
+        const oldPR = topPR ? JSON.parse(topPR.data).oneRM : 0;
+
+        if (oneRM > oldPR) {
+          // New personal record!
+          await notifyFollowers(
+            userId,
+            'personal_record',
+            {
+              exercise_id,
+              exercise_name,
+              oneRM: parseFloat(oneRM.toFixed(2)),
+              reps,
+              weight,
+              username: req.session.username,
+              setId
+            }
+          );
+        }
+      }
+
       res.status(201).json({ 
-        id: result.lastID,
-        exercise_id: exercise_id,
+        id: setId,
+        exercise_id,
         session_id: sessionId,
         reps,
         weight
