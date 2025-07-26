@@ -75,9 +75,9 @@ async function loadSession() {
     list.innerHTML = '';
 
     // Always hide form for closed/readonly sessions first
-    if (readonly || data.closed) {
-      document.getElementById('setForm').style.display = 'none';
-      document.getElementById('closeButton').style.display = 'none';
+    const setForm = document.getElementById('setForm');
+    if (readonly || data.closed && setForm) {
+      setForm.style.display = 'none';
     }
 
     if (!data.sets || data.sets.length === 0) {
