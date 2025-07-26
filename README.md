@@ -92,3 +92,33 @@ gcloud run deploy boga `
 - `public/` – static frontend files
 - `package.json` – dependencies and start script
 
+## Reusable Sidebar Component
+
+A reusable sidebar is implemented as a Web Component. The sidebar HTML is defined in `public/components/sidebar.html` and injected via the `<app-sidebar></app-sidebar>` custom element.
+
+The sidebar contains:
+- Follow Users section with search functionality
+- Notifications section with real-time updates
+- Challenges Received section with filters
+- Challenges Given section with filters
+
+### Implementation Details
+
+The sidebar component (`public/components/sidebar.js`) is self-contained and includes all necessary logic:
+- **User Search**: Find and follow users functionality
+- **Follow Management**: Display followed users with unfollow capability
+- **Notifications**: Real-time notifications with certify/challenge actions
+- **Challenges**: Display and filter challenges with polling updates
+
+### Usage
+
+1. Add `<app-sidebar></app-sidebar>` where you want the sidebar to appear in your HTML.
+2. Ensure you include the script: `<script src="components/sidebar.js"></script>` before your page's main JS.
+3. To update the sidebar, edit only `public/components/sidebar.html`.
+
+### Example
+```html
+<app-sidebar></app-sidebar>
+<script src="components/sidebar.js"></script>
+```
+

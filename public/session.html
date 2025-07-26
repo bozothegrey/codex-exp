@@ -7,23 +7,29 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1 id="sessionTitle">Session</h1>
-    <div id="setList"></div>
-    <form id="setForm">
-      <input type="text" id="setExerciseName" placeholder="Exercise name" required autocomplete="off" list="exerciseSuggestions">
-      <datalist id="exerciseSuggestions"></datalist>
-      <input type="number" id="setReps" placeholder="Reps" min="1" step="1" required>
-      <input type="number" id="setWeight" placeholder="Weight (kg)" min="0" step="any" required>
-      <button type="submit">Add Set</button>
-    </form>
-    <div class="session-actions">
-      <a href="index.html" class="session-action">Back to Home</a>
-      <a href="exercises.html" class="session-action">Manage Exercises</a>
-      <span class="session-action terminate-action" id="terminateSession">Terminate Session</span>
-      <span class="session-action delete-action" id="deleteSession" style="color:red; display:none">Delete Session</span>
+  <div class="main-content">
+    <div class="left-column">
+      <h1 id="sessionTitle">Session</h1>
+      <div id="setList"></div>
+      <form id="setForm">
+        <input type="text" id="setExerciseName" placeholder="Exercise name" required autocomplete="off" list="exerciseSuggestions">
+        <datalist id="exerciseSuggestions"></datalist>
+        <input type="number" id="setReps" placeholder="Reps" min="1" step="1" required>
+        <input type="number" id="setWeight" placeholder="Weight (kg)" min="0" step="any" required>
+        <button type="submit">Add Set</button>
+      </form>
+      <div class="session-actions">
+        <a href="index.html" class="session-action">Back to Home</a>
+        <a href="exercises.html" class="session-action">Manage Exercises</a>
+        <span class="session-action terminate-action" id="terminateSession">Terminate Session</span>
+        <span class="session-action delete-action" id="deleteSession" style="color:red; display:none">Delete Session</span>
+      </div>
+    </div>
+    <div class="right-column">
+      <app-sidebar></app-sidebar>
     </div>
   </div>
+  <script src="components/sidebar.js"></script>
   <script src="session.js"></script>
 </body>
 </html>
