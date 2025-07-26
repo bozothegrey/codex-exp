@@ -1,0 +1,9 @@
+Basic rules for the cursor agent
+
+- Ensure you understand and remember the basic structure of the repository, key dependencies and project structure. 
+- Ensure code you generate is consistent with existing coding standards.
+- Ensure code you generate is tested by at least one test. Prefer writing E2E tests.
+- When writing a large change, ensure README.md is updated to document the change.
+- Avoid code duplication as a priority. If any changes introduce code duplication, go the extra mile to suggest solutions that would remove code duplication, even if they require significant refactoring.
+- Prefer smaller, single purpose, files over large sprawling files.
+- Prefer code that is easily readable. In particular avoid idions such as HTML embedded in code, HTML code generation.
