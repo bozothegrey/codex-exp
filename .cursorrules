@@ -7,3 +7,4 @@ Basic rules for the cursor agent
 - Avoid code duplication as a priority. If any changes introduce code duplication, go the extra mile to suggest solutions that would remove code duplication, even if they require significant refactoring.
 - Prefer smaller, single purpose, files over large sprawling files.
 - Prefer code that is easily readable. In particular avoid idions such as HTML embedded in code, HTML code generation.
+- Avoid generating redundant comments and strongly prefer creating self-describing code. For example if a function name is createUser DO NOT add a comment that says "function to create a user".
