@@ -8,7 +8,8 @@
 </head>
 <body>
   <div class="main-content">
-    <div class="left-column">
+    <div id="swipeContainer" class="swipe-container">
+      <div class="left-column">
       <h1 id="sessionTitle">Session</h1>
       <div id="setList"></div>
       <form id="setForm">
@@ -24,12 +25,14 @@
         <span class="session-action terminate-action" id="terminateSession">Terminate Session</span>
         <span class="session-action delete-action" id="deleteSession" style="color:red; display:none">Delete Session</span>
       </div>
-    </div>
-    <div class="right-column">
-      <app-sidebar></app-sidebar>
+      </div>
+      <div class="right-column">
+        <app-sidebar></app-sidebar>
+      </div>
     </div>
   </div>
   <script src="components/sidebar.js"></script>
   <script src="session.js"></script>
+  <script src="swipe.js"></script>
 </body>
 </html>

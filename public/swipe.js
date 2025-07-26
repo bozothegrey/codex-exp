@@ -1,6 +1,6 @@
 // swipe.js
 (function() {
-  const swipeContainer = document.getElementById('swipeContainer');
+  const swipeContainer = document.querySelector('.swipe-container');
   let startX = null;
   let currentView = 'left'; // 'left' or 'right'
 
