@@ -612,12 +612,12 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
     }
   });
 
-  // Get user's following
+  // Get user's following (including groups)
   app.get('/api/following', ensureLoggedIn, async (req, res) => {
     try {
       const userId = req.session.userId;
       const following = await dbService.query(
-        `SELECT u.id, u.username 
+        `SELECT u.id, u.username, u.is_group_user
          FROM follows f 
          JOIN users u ON f.following_id = u.id 
          WHERE f.follower_id = ?`,
@@ -685,17 +685,55 @@ app.post('/api/follow/:userId', ensureLoggedIn, async (req, res) => {
         [userId]
       );
       
-
       // Notify each follower
       for (const follower of followers) {
         await dbService.run(
           `INSERT INTO notifications (user_id, activity_id, type, data) VALUES (?, ?, ?, ?)`,
           [follower.follower_id, activityId, activityType, JSON.stringify(activityData)]
         );
-        
       }
     } catch (err) {
       console.error('Error notifying followers:', err);
+    }
+  }
+
+  // Helper function to notify group members
+  async function notifyGroupMembers(groupId, activityType, activityData) {
+    try {
+      // Get group user ID
+      const group = await dbService.query(
+        'SELECT group_user_id FROM groups WHERE id = ?',
+        [groupId]
+      );
+      
+      if (group.length === 0) {
+        throw new Error('Group not found');
+      }
+      
+      const groupUserId = group[0].group_user_id;
+      
+      // Create activity under group user
+      const activityResult = await dbService.run(
+        'INSERT INTO user_activities (user_id, type, data) VALUES (?, ?, ?)',
+        [groupUserId, activityType, JSON.stringify(activityData)]
+      );
+      const activityId = activityResult.lastID;
+      
+      // Get group members (excluding the group user itself)
+      const members = await dbService.query(
+        `SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?`,
+        [groupId, groupUserId]
+      );
+      
+      // Notify each member
+      for (const member of members) {
+        await dbService.run(
+          `INSERT INTO notifications (user_id, activity_id, type, data) VALUES (?, ?, ?, ?)`,
+          [member.user_id, activityId, activityType, JSON.stringify(activityData)]
+        );
+      }
+    } catch (err) {
+      console.error('Error notifying group members:', err);
     }
   }
 
@@ -1007,17 +1045,30 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'Group name already exists' });
       }
       
-      // Create the group
-      const result = await dbService.run(
-        'INSERT INTO groups (name, description, owner_id) VALUES (?, ?, ?)',
-        [name, description || null, userId]
+      // Create the group user account first
+      const groupUsername = `group_${name.toLowerCase().replace(/\s+/g, '_')}`;
+      const groupUserResult = await dbService.run(
+        'INSERT INTO users (username, password, is_group_user) VALUES (?, ?, ?)',
+        [groupUsername, 'group_password', 1]
       );
       
-      // Add the creator as a member
-      await dbService.run(
-        'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
-        [result.lastID, userId]
+      // Create the group with group_user_id
+      const result = await dbService.run(
+        'INSERT INTO groups (name, description, owner_id, group_user_id) VALUES (?, ?, ?, ?)',
+        [name, description || null, userId, groupUserResult.lastID]
       );
+      
+      // Add the creator as a member and make them follow the group user
+      await dbService.transaction(async () => {
+        await dbService.run(
+          'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+          [result.lastID, userId]
+        );
+        await dbService.run(
+          'INSERT INTO follows (follower_id, following_id) VALUES (?, ?)',
+          [userId, groupUserResult.lastID]
+        );
+      });
       
       // Get the created group with owner info
       const group = await dbService.query(
@@ -1034,7 +1085,7 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
     }
   });
 
-  // List all groups
+  // List groups where user is a member
   app.get('/api/groups', ensureLoggedIn, async (req, res) => {
     try {
       const userId = req.session.userId;
@@ -1113,7 +1164,7 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'Invalid group ID' });
       }
       
-      // Check if group exists
+      // Check if group exists and get group_user_id
       const group = await dbService.query(
         'SELECT * FROM groups WHERE id = ?',
         [groupId]
@@ -1133,11 +1184,26 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
         return res.status(400).json({ error: 'Already a member of this group' });
       }
       
-      // Add user to group
-      await dbService.run(
-        'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
-        [groupId, userId]
-      );
+      // Add user to group and make them follow the group user if not already following
+      await dbService.transaction(async () => {
+        await dbService.run(
+          'INSERT INTO group_members (group_id, user_id) VALUES (?, ?)',
+          [groupId, userId]
+        );
+        
+        // Check if follow relationship already exists
+        const existingFollow = await dbService.query(
+          'SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?',
+          [userId, group[0].group_user_id]
+        );
+        
+        if (existingFollow.length === 0) {
+          await dbService.run(
+            'INSERT INTO follows (follower_id, following_id) VALUES (?, ?)',
+            [userId, group[0].group_user_id]
+          );
+        }
+      });
       
       res.json({ success: true });
     } catch (err) {
@@ -1205,6 +1271,45 @@ app.get('/api/challenges', ensureLoggedIn, async (req, res) => {
       const result = await dbService.run(
         'DELETE FROM groups WHERE id = ?',
         [groupId]
+      );
+      
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Post activity to a group
+  app.post('/api/groups/:id/activities', ensureLoggedIn, async (req, res) => {
+    try {
+      const groupId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      const { type, data } = req.body;
+      
+      if (isNaN(groupId)) {
+        return res.status(400).json({ error: 'Invalid group ID' });
+      }
+      
+      // Verify user is a member of the group
+      const isMember = await dbService.query(
+        'SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?',
+        [groupId, userId]
+      );
+      
+      if (isMember.length === 0) {
+        return res.status(403).json({ error: 'Only group members can post activities' });
+      }
+      
+      // Notify all group members
+      await notifyGroupMembers(
+        groupId,
+        type,
+        {
+          ...data,
+          groupId,
+          postedBy: userId,
+          postedByUsername: req.session.username
+        }
       );
       
       res.json({ success: true });

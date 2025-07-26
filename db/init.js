@@ -10,8 +10,16 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            admin INTEGER DEFAULT 0
+            admin INTEGER DEFAULT 0,
+            is_group_user BOOLEAN DEFAULT 0
         )`);
+
+        // Migration: Add is_group_user column if needed
+        const userColumns = await dbService.query(`PRAGMA table_info(users)`);
+        const hasIsGroupUser = userColumns.some(col => col.name === 'is_group_user');
+        if (!hasIsGroupUser) {
+          await dbService.run(`ALTER TABLE users ADD COLUMN is_group_user BOOLEAN DEFAULT 0`);
+        }
 
         // Create locations table
         await dbService.run(`CREATE TABLE IF NOT EXISTS locations (
@@ -212,9 +220,20 @@ async function initializeDatabase(dbService, insertDefaultUsers = false, insertD
             name TEXT NOT NULL,
             description TEXT,
             owner_id INTEGER NOT NULL,
+            group_user_id INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (group_user_id) REFERENCES users(id) ON DELETE CASCADE
         )`);
+
+        // Migration: Add group_user_id column if needed
+        const groupColumns = await dbService.query(`PRAGMA table_info(groups)`);
+        const hasGroupUserId = groupColumns.some(col => col.name === 'group_user_id');
+        if (!hasGroupUserId) {
+          await dbService.run(`ALTER TABLE groups ADD COLUMN group_user_id INTEGER NOT NULL DEFAULT 0`);
+          // Need to handle existing groups - set to 0 as placeholder
+          // In production you'd want to backfill with actual group user IDs
+        }
 
         await dbService.run(`CREATE TABLE IF NOT EXISTS group_members (
             group_id INTEGER NOT NULL,

@@ -108,6 +108,7 @@ async function updateAuthLinks() {
   }
 }
 
+
 document.getElementById('findUserBtn').addEventListener('click', async () => {
   const username = document.getElementById('userSearchInput').value.trim();
   const resultDiv = document.getElementById('userSearchResult');
