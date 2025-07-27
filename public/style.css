@@ -33,11 +33,41 @@ header {
   flex: 1;
 }
 
-.follow-section, .notifications-section, .challenges-section {
+.follow-section, .notifications-section, .challenges-section, .groups-section {
   background-color: white;
   padding: 10px;
   margin-bottom: 10px;
   border: 1px solid #dcdcdc;
+}
+
+.group-controls {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.group-controls input {
+  flex: 1;
+}
+
+#groupSearchResult {
+  margin-bottom: 10px;
+}
+
+.leave-group-btn {
+  color: red;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 5px;
+}
+
+.join-group-btn {
+  color: #1ca21c;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 5px;
 }
 
 form {
@@ -227,12 +257,33 @@ th, td {
 
 .session-action {
   color: #0000EE;
-  text-decoration: underline;
+  text-decoration: none;
   cursor: pointer;
   margin-right: 8px;
+  background: none;
+  border: none;
+  padding: 2px 5px;
 }
 .session-action:hover {
   color: #551A8B;
+  text-decoration: none;
+}
+
+.group-action-btn {
+  color: #0000EE;
+  text-decoration: none;
+  cursor: pointer;
+  margin-right: 8px;
+  background: none;
+  border: none;
+  padding: 2px 5px;
+}
+.group-action-btn:hover {
+  color: #551A8B;
+  text-decoration: none;
+}
+.group-action-btn.delete {
+  color: #b00;
 }
 .terminate-action {
   color: #b00;

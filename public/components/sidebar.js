@@ -9,8 +9,9 @@ class AppSidebar extends HTMLElement {
     this.innerHTML = html;
     
     // Initialize sidebar functionality
-    this.setupUserSearch();
+    this.setupUserSearch();    
     this.setupFollowedUsers();
+    this.setupGroups();
     this.setupNotifications();
     this.setupChallenges();
   }
@@ -102,6 +103,221 @@ class AppSidebar extends HTMLElement {
     li.appendChild(btn);
     ul.appendChild(li);
   }
+
+  //Groups Functionality
+  setupGroups() {
+    // Initialize create group button
+    const createBtn = this.querySelector('#createGroupBtn');
+    if (createBtn) {
+      createBtn.addEventListener('click', async () => {
+        try {
+          await this.createGroup();
+        } catch (error) {
+          console.error('Error creating group:', error);
+        }
+      });
+    }
+
+    // Initialize groups list
+    this.groupsList = this.querySelector('#groupsList');
+    if (!this.groupsList) {
+      this.groupsList = document.createElement('ul');
+      this.groupsList.id = 'groupsList';
+      this.appendChild(this.groupsList);
+    }
+
+    // Initial fetch of groups
+    this.fetchGroups();
+
+    // Set up periodic refresh (every 30 seconds)
+    this.groupsRefreshInterval = setInterval(() => {
+      this.fetchGroups();
+    }, 30000);
+  }
+
+  // Don't forget to clear interval when component disconnects
+  disconnectedCallback() {
+    if (this.groupsRefreshInterval) {
+      clearInterval(this.groupsRefreshInterval);
+    }
+  }
+
+
+  async fetchGroups() {
+    try {
+      const res = await fetch('/api/groups');
+      if (!res.ok) {
+        console.error('Failed to fetch groups');
+        return;
+      }
+      const groups = await res.json();
+      const groupsList = this.querySelector('#groupsList');
+      groupsList.innerHTML = '';
+      
+      groups.forEach(group => {
+        const li = document.createElement('li');
+        const memberStatus = group.is_member ? ' (Member)' : '';
+        const ownerStatus = group.is_owner ? ' (Owner)' : '';
+        const status = group.is_owner ? ownerStatus : (group.is_member ? memberStatus : '');
+        
+        li.innerHTML = `
+          <strong>${group.name}</strong>${status}<br>
+          <small>Owner: ${group.owner_username}</small><br>
+          <small>${group.description || 'No description'}</small><br>
+          <small>Created: ${new Date(group.created_at).toLocaleDateString()}</small>
+        `;
+        
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.marginTop = '5px';
+        
+        if (!group.is_member) {
+          const joinBtn = document.createElement('button');
+          joinBtn.textContent = 'Join';
+          joinBtn.className = 'session-action';
+          joinBtn.onclick = () => this.joinGroup(group.id);
+          actionsDiv.appendChild(joinBtn);
+        } else if (!group.is_owner) {
+          const leaveBtn = document.createElement('button');
+          leaveBtn.textContent = 'Leave';
+          leaveBtn.className = 'session-action';
+          leaveBtn.style.color = 'red';
+          leaveBtn.onclick = () => this.leaveGroup(group.id);
+          actionsDiv.appendChild(leaveBtn);
+        } else {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.className = 'session-action';
+          deleteBtn.style.color = 'red';
+          deleteBtn.onclick = () => this.deleteGroup(group.id);
+          actionsDiv.appendChild(deleteBtn);
+        }
+        
+        const viewBtn = document.createElement('button');
+        viewBtn.textContent = 'View Members';
+        viewBtn.className = 'session-action';
+        viewBtn.onclick = () => this.viewGroupMembers(group.id);
+        actionsDiv.appendChild(viewBtn);
+        
+        li.appendChild(actionsDiv);
+        groupsList.appendChild(li);
+      });
+    } catch (e) {
+      console.error('Error fetching groups:', e);
+    }
+  }
+
+    async createGroup() {
+      const name = prompt('Enter group name:');
+      if (!name) return;
+      
+      const description = prompt('Enter group description (optional):');
+      
+      try {
+        const res = await fetch('/api/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description })
+        });
+        
+        if (res.ok) {
+          alert('Group created successfully!');
+          this.fetchGroups();
+        } else {
+          const data = await res.json();
+          alert('Failed to create group: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        console.error('Error creating group:', e);
+        alert('Failed to create group');
+      }
+    }
+
+    async joinGroup(groupId) {
+    try {
+      const res = await fetch(`/api/groups/${groupId}/join`, {
+        method: 'POST'
+      });
+      
+      if (res.ok) {
+        alert('Joined group successfully!');
+        this.fetchGroups();
+      } else {
+        const data = await res.json();
+        alert('Failed to join group: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error joining group:', e);
+      alert('Failed to join group');
+    }
+  }
+
+  async leaveGroup(groupId) {
+    if (!confirm('Are you sure you want to leave this group?')) return;
+    
+    try {
+      const res = await fetch(`/api/groups/${groupId}/leave`, {
+        method: 'DELETE'
+      });
+      
+      if (res.ok) {
+        alert('Left group successfully!');
+        this.fetchGroups();
+      } else {
+        const data = await res.json();
+        alert('Failed to leave group: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error leaving group:', e);
+      alert('Failed to leave group');
+    }
+  }
+
+  async deleteGroup(groupId) {
+    if (!confirm('Are you sure you want to delete this group? This action cannot be undone.')) return;
+    
+    try {
+      const res = await fetch(`/api/groups/${groupId}`, {
+        method: 'DELETE'
+      });
+      
+      if (res.ok) {
+        alert('Group deleted successfully!');
+        this.fetchGroups();
+      } else {
+        const data = await res.json();
+        alert('Failed to delete group: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error deleting group:', e);
+      alert('Failed to delete group');
+    }
+  }
+
+  async viewGroupMembers(groupId) {
+    try {
+      const res = await fetch(`/api/groups/${groupId}`);
+      if (!res.ok) {
+        alert('Failed to load group details');
+        return;
+      }
+      
+      const group = await res.json();
+      let membersList = `Group: ${group.name}\n\nMembers:\n`;
+      
+      group.members.forEach(member => {
+        const role = member.is_owner ? ' (Owner)' : '';
+        const joinedDate = new Date(member.joined_at).toLocaleDateString();
+        membersList += `• ${member.username}${role} - Joined: ${joinedDate}\n`;
+      });
+      
+      alert(membersList);
+    } catch (e) {
+      console.error('Error viewing group members:', e);
+      alert('Failed to load group members');
+    }
+  }
+
+
 
   // Notifications Functionality
   setupNotifications() {

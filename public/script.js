@@ -111,14 +111,6 @@ async function updateAuthLinks() {
 
 
 
-
-
-
-
-
-
-
-
 function setupTerminateButtons() {
   document.addEventListener('click', async (e) => {
     if (e.target.classList.contains('terminate-action')) {
@@ -265,6 +257,7 @@ function setupLocationManagement() {
   });
 }
 
+
 window.onload = async () => {
     // Redirect to login if not authenticated (except on login and signup pages)
     if (!window.location.pathname.endsWith('login.html') && !window.location.pathname.endsWith('signup.html')) {
@@ -282,7 +275,6 @@ window.onload = async () => {
     }
     await updateAuthLinks();
     await loadLocations();
-    fetchSessions();
     setupTerminateButtons();
-    setupLocationManagement();
+    setupLocationManagement();    
 };
